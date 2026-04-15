@@ -47,6 +47,7 @@ export interface SARScene {
   processingLevel?: string;
   polarization?: string;
   beamMode?: string;
+  browseUrl?: string | null;
 }
 
 export interface MapLayer {

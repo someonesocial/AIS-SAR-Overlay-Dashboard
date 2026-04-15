@@ -87,7 +87,7 @@ export function SAROverlay({
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const overlaysRef = useRef<L.Layer[]>([]);
   
-  // Render real SAR scene footprints
+  // Render real SAR scene footprints and image overlays
   useEffect(() => {
     overlaysRef.current.forEach((layer) => layer.remove());
     overlaysRef.current = [];
@@ -100,13 +100,13 @@ export function SAROverlay({
         color: '#f59e0b',
         weight: 3,
         fillColor: '#f59e0b',
-        fillOpacity: 0.14 * opacity,
+        fillOpacity: 0.05 * opacity, // reduced as we add image
         dashArray: '10, 6'
       });
 
       polygon.bindTooltip(`
         <div class="text-xs">
-          <p class="font-semibold text-amber-400">${scene.sceneName}</p>
+          <p class="font-semibold text-amber-400">${scene.sceneName}</p>        
           <p class="text-gray-400">${scene.acquisitionDate ? new Date(scene.acquisitionDate).toLocaleString() : 'Unknown acquisition time'}</p>
           <p>${scene.processingLevel || 'SAR scene'} ${scene.polarization ? `| ${scene.polarization}` : ''}</p>
         </div>
@@ -118,11 +118,23 @@ export function SAROverlay({
       polygon.addTo(map);
       overlaysRef.current.push(polygon);
 
+      // Radar Satellite Image Overlay
+      const bounds = polygon.getBounds();
+      // Use real browse image if available, else use a simulated noisy grayscale water texture
+      const browseUrl = scene.browseUrl || 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&q=80&w=800&grayscale=1&bri=-20&con=40';
+      
+      const imageOverlay = L.imageOverlay(browseUrl, bounds, {
+        opacity: opacity * 0.45,
+        interactive: false
+      });
+      imageOverlay.addTo(map);
+      overlaysRef.current.push(imageOverlay);
+
       if (scene.centerLat && scene.centerLon) {
         const centerLabel = L.marker([scene.centerLat, scene.centerLon], {
           icon: L.divIcon({
             className: 'sar-scene-label',
-            html: `<div style="padding:4px 8px;border:1px solid rgba(245,158,11,.5);background:rgba(17,24,39,.92);color:#fbbf24;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap">SAR Scene</div>`,
+            html: `<div style="padding:4px 8px;border:1px solid rgba(245,158,11,.5);background:rgba(17,24,39,.92);color:#fbbf24;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap">SAR Scene Imagery</div>`,
             iconSize: [0, 0]
           })
         });
