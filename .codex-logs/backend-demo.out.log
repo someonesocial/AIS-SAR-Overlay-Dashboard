@@ -1,0 +1,11 @@
+◇ injected env (4) from ..\.env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+◇ injected env (0) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+╔════════════════════════════════════════════════════════╗
+║     🛰️  EYE OF GOD - Maritime Surveillance Server     ║
+╠════════════════════════════════════════════════════════╣
+║  📡 HTTP API:    http://localhost:3001/api            ║
+║  🔌 WebSocket:   ws://localhost:3001/ws               ║
+╚════════════════════════════════════════════════════════╝
+
+🔌 Connecting to aisstream.io...
+✅ Connected to aisstream.io

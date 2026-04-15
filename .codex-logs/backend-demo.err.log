@@ -1,0 +1,9 @@
+= : Die Benennung "=" wurde nicht als Name eines Cmdlet, einer Funktion, einer Skriptdatei oder eines ausfÅhrbaren 
+Programms erkannt. öberprÅfen Sie die Schreibweise des Namens, oder ob der Pfad korrekt ist (sofern enthalten), und 
+wiederholen Sie den Vorgang.
+In Zeile:1 Zeichen:1
++ =''; node index.js
++ ~~~
+    + CategoryInfo          : ObjectNotFound: (=:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
