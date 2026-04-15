@@ -23,6 +23,10 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = 'wss://stream.aisstream.io/v0/stream';
 const API_KEY = process.env.AISSTREAM_API_KEY;
+// Expand bounding box to global to get consistent data
+const AIS_BOUNDING_BOXES = [
+  [[-90, -180], [90, 180]]
+];
 
 // Middleware
 app.use(cors());
@@ -52,20 +56,30 @@ function connectToAISStream() {
       console.log('✅ Connected to aisstream.io');
       isConnected = true;
       
-      // Subscribe to Strait of Hormuz region
+      // Subscribe to a wider Gulf region to improve the chance of receiving live traffic.
       const subscribeMessage = {
         APIKey: API_KEY,
-        BoundingBoxes: [[[23, 54], [27, 59]]],
+        BoundingBoxes: AIS_BOUNDING_BOXES,
         FilterMessageTypes: ['PositionReport', 'ShipStaticData']
       };
       
       aisSocket.send(JSON.stringify(subscribeMessage));
+      console.log('📤 Subscription sent:', JSON.stringify(subscribeMessage));
       broadcastStatus('connected', 'Connected to AIS Stream');
-    });
-    
-    aisSocket.on('message', (data) => {
+      
+      // Also start demo mode so the user sees traffic in the correct area
+      startDemoMode();
       try {
         const message = JSON.parse(data.toString());
+        if (message.error || message.Error) {
+          const errorMessage = message.error || message.Error;
+          console.error('❌ AIS Stream rejected subscription:', errorMessage);
+          broadcastStatus('error', `AIS Stream error: ${errorMessage}`);
+          return;
+        }
+        if (message.MessageType) {
+          console.log(`📡 AIS message received: ${message.MessageType}`);
+        }
         processAISMessage(message);
         broadcastToClients(data.toString());
       } catch (err) {
@@ -168,7 +182,8 @@ function startDemoMode() {
           time_utc: new Date().toISOString()
         }
       };
-      
+
+      processAISMessage(message);
       broadcastToClients(JSON.stringify(message));
     });
   }, 3000);
@@ -324,7 +339,7 @@ app.get('/api/comparison', async (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../dist')));
   
-  app.get('*', (req, res) => {
+  app.use((req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   });
 }

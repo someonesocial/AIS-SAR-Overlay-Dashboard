@@ -35,6 +35,20 @@ export interface SARDetection {
   estimatedType?: ShipType;
 }
 
+export interface SARScene {
+  id: string;
+  sceneName: string;
+  acquisitionDate?: string;
+  centerLat?: number | null;
+  centerLon?: number | null;
+  footprint?: string | null;
+  downloadUrl?: string;
+  fileSize?: number | null;
+  processingLevel?: string;
+  polarization?: string;
+  beamMode?: string;
+}
+
 export interface MapLayer {
   id: 'ais' | 'sar' | 'detection' | 'heatmap' | 'grid';
   label: string;

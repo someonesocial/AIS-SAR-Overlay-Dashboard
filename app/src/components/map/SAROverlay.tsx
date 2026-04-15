@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
-import type { SARDetection } from '@/types';
+import type { SARDetection, SARScene } from '@/types';
 
 interface SAROverlayProps {
+  scenes: SARScene[];
   detections: SARDetection[];
   opacity?: number;
   showDetections?: boolean;
@@ -61,7 +62,22 @@ function createScanLine(bounds: L.LatLngBounds): L.Polyline {
   });
 }
 
+function parseFootprint(footprint) {
+  if (!footprint) return [];
+  const matches = footprint.match(/-?\d+\.?\d*/g);
+  if (!matches || matches.length < 6) return [];
+
+  const coords = [];
+  for (let i = 0; i < matches.length; i += 2) {
+    const lon = Number(matches[i]);
+    const lat = Number(matches[i + 1]);
+    coords.push([lat, lon]);
+  }
+  return coords;
+}
+
 export function SAROverlay({ 
+  scenes,
   detections, 
   opacity = 0.6, 
   showDetections = true,
@@ -69,71 +85,58 @@ export function SAROverlay({
 }: SAROverlayProps) {
   const map = useMap();
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
-  const overlayRef = useRef<L.Rectangle | null>(null);
-  const scanLineRef = useRef<L.Polyline | null>(null);
-  const scanAnimationRef = useRef<number | null>(null);
+  const overlaysRef = useRef<L.Layer[]>([]);
   
-  // Create SAR overlay area
+  // Render real SAR scene footprints
   useEffect(() => {
-    // Define SAR coverage area (Strait of Hormuz region)
-    const bounds: L.LatLngBoundsLiteral = [
-      [23.5, 54.5],
-      [26.5, 58.5]
-    ];
-    
-    // Create semi-transparent overlay
-    const overlay = L.rectangle(bounds, {
-      color: '#f59e0b',
-      weight: 1,
-      fillColor: '#f59e0b',
-      fillOpacity: 0.05 * opacity,
-      dashArray: '5, 5'
+    overlaysRef.current.forEach((layer) => layer.remove());
+    overlaysRef.current = [];
+
+    scenes.forEach((scene) => {
+      const coords = parseFootprint(scene.footprint);
+      if (coords.length < 3) return;
+
+      const polygon = L.polygon(coords, {
+        color: '#f59e0b',
+        weight: 3,
+        fillColor: '#f59e0b',
+        fillOpacity: 0.14 * opacity,
+        dashArray: '10, 6'
+      });
+
+      polygon.bindTooltip(`
+        <div class="text-xs">
+          <p class="font-semibold text-amber-400">${scene.sceneName}</p>
+          <p class="text-gray-400">${scene.acquisitionDate ? new Date(scene.acquisitionDate).toLocaleString() : 'Unknown acquisition time'}</p>
+          <p>${scene.processingLevel || 'SAR scene'} ${scene.polarization ? `| ${scene.polarization}` : ''}</p>
+        </div>
+      `, {
+        direction: 'top',
+        className: 'bg-gray-900 text-white border border-amber-500/50 rounded px-2 py-1'
+      });
+
+      polygon.addTo(map);
+      overlaysRef.current.push(polygon);
+
+      if (scene.centerLat && scene.centerLon) {
+        const centerLabel = L.marker([scene.centerLat, scene.centerLon], {
+          icon: L.divIcon({
+            className: 'sar-scene-label',
+            html: `<div style="padding:4px 8px;border:1px solid rgba(245,158,11,.5);background:rgba(17,24,39,.92);color:#fbbf24;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap">SAR Scene</div>`,
+            iconSize: [0, 0]
+          })
+        });
+
+        centerLabel.addTo(map);
+        overlaysRef.current.push(centerLabel);
+      }
     });
-    
-    overlay.addTo(map);
-    overlayRef.current = overlay;
-    
-    // Create scan line
-    const scanLine = createScanLine(L.latLngBounds(bounds));
-    scanLine.addTo(map);
-    scanLineRef.current = scanLine;
-    
-    // Animate scan line
-    let direction = 1;
-    let currentLat = bounds[0][0];
-    const minLat = bounds[0][0];
-    const maxLat = bounds[1][0];
-    
-    const animate = () => {
-      if (!scanLineRef.current) return;
-      
-      currentLat += 0.01 * direction;
-      
-      if (currentLat >= maxLat) {
-        direction = -1;
-      } else if (currentLat <= minLat) {
-        direction = 1;
-      }
-      
-      const newLatlngs: L.LatLngExpression[] = [
-        [currentLat, bounds[0][1]],
-        [currentLat, bounds[1][1]]
-      ];
-      
-      scanLineRef.current.setLatLngs(newLatlngs);
-      scanAnimationRef.current = requestAnimationFrame(animate);
-    };
-    
-    scanAnimationRef.current = requestAnimationFrame(animate);
-    
+
     return () => {
-      overlay.remove();
-      scanLine.remove();
-      if (scanAnimationRef.current) {
-        cancelAnimationFrame(scanAnimationRef.current);
-      }
+      overlaysRef.current.forEach((layer) => layer.remove());
+      overlaysRef.current = [];
     };
-  }, [map, opacity]);
+  }, [map, scenes, opacity]);
   
   // Create/update detection markers
   useEffect(() => {

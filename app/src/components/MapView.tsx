@@ -1,29 +1,10 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import type { AISShip, SARDetection, MapLayer } from '@/types';
-import { ShipMarkers } from './map/ShipMarkers';
-import { SAROverlay } from './map/SAROverlay';
-import { DarkVesselMarkers } from './map/DarkVesselMarkers';
-import { HeatmapLayer } from './map/HeatmapLayer';
-import { GridOverlay } from './map/GridOverlay';
-
-// Fix Leaflet default icons
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
+import { useMemo } from 'react';
+import type { AISShip, SARDetection, SARScene, MapLayer } from '@/types';
+import { shipTypeConfig } from '@/data/mockData';
 
 interface MapViewProps {
   ships: AISShip[];
+  sarScenes: SARScene[];
   sarDetections: SARDetection[];
   darkVessels?: SARDetection[];
   layers: MapLayer[];
@@ -33,206 +14,287 @@ interface MapViewProps {
   zoom?: number;
 }
 
-// Map controller component for external control
-function MapController({ 
-  center, 
-  zoom,
-  selectedShip 
-}: { 
-  center?: [number, number]; 
-  zoom?: number;
-  selectedShip?: AISShip | null;
-}) {
-  const map = useMap();
-  const initialCenterSet = useRef(false);
-  
-  // Set initial view
-  useEffect(() => {
-    if (center && zoom && !initialCenterSet.current) {
-      map.setView(center, zoom);
-      initialCenterSet.current = true;
-    }
-  }, [map, center, zoom]);
-  
-  // Pan to selected ship
-  useEffect(() => {
-    if (selectedShip) {
-      map.panTo([selectedShip.latitude, selectedShip.longitude], {
-        animate: true,
-        duration: 0.5
-      });
-    }
-  }, [map, selectedShip]);
-  
-  return null;
+const AOI = {
+  minLat: 23,
+  maxLat: 27,
+  minLon: 54,
+  maxLon: 59
+};
+
+function project(lat: number, lon: number) {
+  const x = ((lon - AOI.minLon) / (AOI.maxLon - AOI.minLon)) * 100;
+  const y = ((AOI.maxLat - lat) / (AOI.maxLat - AOI.minLat)) * 100;
+  return { x, y };
 }
 
-// Map events handler
-function MapEvents({ onMapClick }: { onMapClick: () => void }) {
-  useMapEvents({
-    click: () => {
-      onMapClick();
-    }
-  });
-  return null;
+function parseFootprint(footprint?: string | null) {
+  if (!footprint) return [];
+  const matches = footprint.match(/-?\d+\.?\d*/g);
+  if (!matches || matches.length < 6) return [];
+
+  const coords: Array<[number, number]> = [];
+  for (let i = 0; i < matches.length; i += 2) {
+    coords.push([Number(matches[i + 1]), Number(matches[i])]);
+  }
+  return coords;
+}
+
+function StatusPanel({
+  ships,
+  sarScenes,
+  darkVessels,
+  aisEnabled,
+  sarEnabled
+}: {
+  ships: AISShip[];
+  sarScenes: SARScene[];
+  darkVessels: SARDetection[];
+  aisEnabled: boolean;
+  sarEnabled: boolean;
+}) {
+  const show = (aisEnabled && ships.length === 0) || (sarEnabled && sarScenes.length === 0);
+  if (!show) return null;
+
+  return (
+    <div className="absolute top-4 left-4 z-20 max-w-md">
+      <div className="glass-panel rounded-xl px-4 py-3 text-sm">
+        <p className="font-semibold text-white">Operational Status</p>
+        {aisEnabled && ships.length === 0 && (
+          <p className="mt-2 text-gray-300">
+            The AIS websocket is connected, but no live ship position messages are arriving for the current key or subscription.
+          </p>
+        )}
+        {sarEnabled && sarScenes.length === 0 && (
+          <p className="mt-2 text-gray-300">
+            No SAR scenes were returned for the selected area and time window.
+          </p>
+        )}
+        <p className="mt-2 text-xs text-gray-500">
+          Current counts: {ships.length} AIS ships, {sarScenes.length} SAR scenes, {darkVessels.length} dark-vessel candidates.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function MapView({
   ships,
+  sarScenes,
   sarDetections,
   darkVessels = [],
   layers,
   selectedShipMMSI,
-  onSelectShip,
-  center = [25.0, 56.5],
-  zoom = 8
+  onSelectShip
 }: MapViewProps) {
-  const mapRef = useRef<L.Map | null>(null);
-  
-  const handleMapClick = useCallback(() => {
-    onSelectShip(null);
-  }, [onSelectShip]);
-  
-  // Get layer states
-  const aisEnabled = layers.find(l => l.id === 'ais')?.enabled ?? true;
-  const sarEnabled = layers.find(l => l.id === 'sar')?.enabled ?? false;
-  const detectionEnabled = layers.find(l => l.id === 'detection')?.enabled ?? true;
-  const heatmapEnabled = layers.find(l => l.id === 'heatmap')?.enabled ?? false;
-  const gridEnabled = layers.find(l => l.id === 'grid')?.enabled ?? false;
-  
-  // Get opacities
-  const aisOpacity = layers.find(l => l.id === 'ais')?.opacity ?? 0.9;
-  const sarOpacity = layers.find(l => l.id === 'sar')?.opacity ?? 0.6;
-  const detectionOpacity = layers.find(l => l.id === 'detection')?.opacity ?? 0.8;
-  
-  // Get selected ship
-  const selectedShip = selectedShipMMSI 
-    ? ships.find(s => s.mmsi === selectedShipMMSI) 
-    : null;
-  
+  const aisEnabled = layers.find((l) => l.id === 'ais')?.enabled ?? true;
+  const sarEnabled = layers.find((l) => l.id === 'sar')?.enabled ?? true;
+  const detectionEnabled = layers.find((l) => l.id === 'detection')?.enabled ?? true;
+  const heatmapEnabled = layers.find((l) => l.id === 'heatmap')?.enabled ?? false;
+  const gridEnabled = layers.find((l) => l.id === 'grid')?.enabled ?? true;
+
+  const selectedShip = selectedShipMMSI ? ships.find((ship) => ship.mmsi === selectedShipMMSI) : null;
+
+  const sceneShapes = useMemo(
+    () =>
+      sarScenes
+        .map((scene) => ({
+          scene,
+          points: parseFootprint(scene.footprint)
+            .map(([lat, lon]) => {
+              const { x, y } = project(lat, lon);
+              return `${x},${y}`;
+            })
+            .join(' ')
+        }))
+        .filter((shape) => shape.points.length > 0),
+    [sarScenes]
+  );
+
   return (
-    <div className="relative flex-1 bg-[#0a0f1c]">
-      <MapContainer
-        ref={mapRef}
-        center={center}
-        zoom={zoom}
-        className="w-full h-full"
-        style={{ background: '#0a0f1c' }}
-        zoomControl={false}
-        attributionControl={true}
+    <div className="relative flex-1 overflow-hidden bg-[#050b16]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.10),transparent_30%),linear-gradient(180deg,#08101d_0%,#050b16_100%)]" />
+
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full"
+        onClick={() => onSelectShip(null)}
       >
-        {/* Base Map - Dark Matter */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={19}
+        <defs>
+          <pattern id="ops-grid-major" width="20" height="25" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 25" fill="none" stroke="rgba(51,65,85,0.85)" strokeWidth="0.3" />
+          </pattern>
+          <pattern id="ops-grid-minor" width="4" height="5" patternUnits="userSpaceOnUse">
+            <path d="M 4 0 L 0 0 0 5" fill="none" stroke="rgba(30,41,59,0.8)" strokeWidth="0.12" />
+          </pattern>
+          <radialGradient id="heat-glow">
+            <stop offset="0%" stopColor="rgba(168,85,247,0.32)" />
+            <stop offset="100%" stopColor="rgba(168,85,247,0)" />
+          </radialGradient>
+        </defs>
+
+        <rect x="0" y="0" width="100" height="100" fill="url(#ops-grid-minor)" />
+        {gridEnabled && <rect x="0" y="0" width="100" height="100" fill="url(#ops-grid-major)" />}
+
+        <rect
+          x="0"
+          y="0"
+          width="100"
+          height="100"
+          fill="none"
+          stroke="rgba(34,211,238,0.7)"
+          strokeWidth="0.45"
+          strokeDasharray="1.6 1"
         />
-        
-        {/* Grid Overlay */}
-        {gridEnabled && <GridOverlay />}
-        
-        {/* Heatmap Layer */}
-        {heatmapEnabled && <HeatmapLayer ships={ships} />}
-        
-        {/* SAR Imagery Overlay */}
-        {sarEnabled && (
-          <SAROverlay 
-            detections={sarDetections} 
-            opacity={sarOpacity}
-            showDetections={detectionEnabled}
-            detectionOpacity={detectionOpacity}
-          />
-        )}
-        
-        {/* Dark Vessel Markers */}
-        {detectionEnabled && darkVessels.length > 0 && (
-          <DarkVesselMarkers
-            vessels={darkVessels}
-            opacity={detectionOpacity}
-          />
-        )}
-        
-        {/* AIS Ship Markers */}
-        {aisEnabled && (
-          <ShipMarkers
-            ships={ships}
-            selectedMMSI={selectedShipMMSI}
-            onSelectShip={onSelectShip}
-            opacity={aisOpacity}
-          />
-        )}
-        
-        {/* Map Controller */}
-        <MapController 
-          center={center} 
-          zoom={zoom}
-          selectedShip={selectedShip}
-        />
-        
-        {/* Map Events */}
-        <MapEvents onMapClick={handleMapClick} />
-      </MapContainer>
-      
-      {/* Custom Zoom Controls */}
-      <div className="absolute bottom-6 right-6 flex flex-col gap-1 z-[400]">
-        <button
-          className="w-8 h-8 bg-[#111827] border border-gray-700 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-          onClick={() => mapRef.current?.zoomIn()}
-        >
-          +
-        </button>
-        <button
-          className="w-8 h-8 bg-[#111827] border border-gray-700 rounded flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-          onClick={() => mapRef.current?.zoomOut()}
-        >
-          −
-        </button>
-      </div>
-      
-      {/* Scale indicator */}
-      <div className="absolute bottom-6 left-6 z-[400]">
-        <div className="glass-panel px-3 py-1.5 rounded text-xs text-gray-400">
-          <span className="font-mono">Strait of Hormuz Region</span>
-          <span className="mx-2 text-gray-600">|</span>
+
+        <text x="1.8" y="4.4" fill="#67e8f9" fontSize="2.9" fontWeight="700">
+          Strait of Hormuz Overlay
+        </text>
+        <text x="1.8" y="7.2" fill="#94a3b8" fontSize="2">
+          Tactical AIS / SAR comparison surface
+        </text>
+
+        {gridEnabled &&
+          [23, 24, 25, 26, 27].map((lat, index) => (
+            <text key={`lat-${lat}`} x="1.2" y={92 - index * 25} fill="#64748b" fontSize="1.5">
+              {lat}°N
+            </text>
+          ))}
+
+        {gridEnabled &&
+          [54, 55, 56, 57, 58, 59].map((lon, index) => (
+            <text key={`lon-${lon}`} x={index * 20 + 1.5} y="98" fill="#64748b" fontSize="1.5">
+              {lon}°E
+            </text>
+          ))}
+
+        {heatmapEnabled &&
+          ships.map((ship) => {
+            const { x, y } = project(ship.latitude, ship.longitude);
+            return <circle key={`heat-${ship.mmsi}`} cx={x} cy={y} r="4.5" fill="url(#heat-glow)" />;
+          })}
+
+        {sarEnabled &&
+          sceneShapes.map(({ scene, points }) => (
+            <g key={scene.id}>
+              <polygon
+                points={points}
+                fill="rgba(245,158,11,0.18)"
+                stroke="rgba(251,191,36,0.98)"
+                strokeWidth="0.52"
+                strokeDasharray="1.8 1.1"
+              />
+              {scene.centerLat != null && scene.centerLon != null && (
+                <>
+                  <circle {...project(scene.centerLat, scene.centerLon)} r="0.55" fill="#fbbf24" />
+                  <text
+                    x={project(scene.centerLat, scene.centerLon).x + 0.8}
+                    y={project(scene.centerLat, scene.centerLon).y - 0.8}
+                    fill="#fbbf24"
+                    fontSize="1.7"
+                    fontWeight="700"
+                  >
+                    SAR
+                  </text>
+                </>
+              )}
+            </g>
+          ))}
+
+        {detectionEnabled &&
+          sarDetections.map((detection) => {
+            const { x, y } = project(detection.latitude, detection.longitude);
+            return (
+              <g key={detection.id}>
+                <rect
+                  x={x - 0.8}
+                  y={y - 0.8}
+                  width="1.6"
+                  height="1.6"
+                  fill="none"
+                  stroke="#f59e0b"
+                  strokeWidth="0.25"
+                />
+              </g>
+            );
+          })}
+
+        {detectionEnabled &&
+          darkVessels.map((vessel) => {
+            const { x, y } = project(vessel.latitude, vessel.longitude);
+            return (
+              <g key={vessel.id}>
+                <circle cx={x} cy={y} r="1.2" fill="rgba(239,68,68,0.18)" stroke="rgba(248,113,113,0.95)" strokeWidth="0.35" />
+                <circle cx={x} cy={y} r="0.35" fill="#ef4444" />
+              </g>
+            );
+          })}
+
+        {aisEnabled &&
+          ships.map((ship) => {
+            const { x, y } = project(ship.latitude, ship.longitude);
+            const config = shipTypeConfig[ship.type] || shipTypeConfig.other;
+            const selected = selectedShip?.mmsi === ship.mmsi;
+
+            return (
+              <g
+                key={ship.mmsi}
+                transform={`translate(${x},${y}) rotate(${ship.course})`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectShip(ship.mmsi);
+                }}
+                style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+              >
+                {selected && <circle cx="0" cy="0" r="2.1" fill="none" stroke={config.color} strokeWidth="0.28" opacity="0.8" />}
+                <polygon
+                  points="0,-1.45 1.05,1.15 -1.05,1.15"
+                  fill={config.color}
+                  stroke="white"
+                  strokeWidth="0.22"
+                />
+              </g>
+            );
+          })}
+      </svg>
+
+      <StatusPanel
+        ships={ships}
+        sarScenes={sarScenes}
+        darkVessels={darkVessels}
+        aisEnabled={aisEnabled}
+        sarEnabled={sarEnabled}
+      />
+
+      <div className="absolute bottom-6 left-6 z-20">
+        <div className="glass-panel rounded px-3 py-1.5 text-xs text-gray-400">
           <span className="font-mono text-cyan-400">{ships.length}</span>
-          <span className="text-gray-500 ml-1">AIS</span>
+          <span className="ml-1 text-gray-500">AIS</span>
           <span className="mx-2 text-gray-600">|</span>
-          <span className="font-mono text-amber-400">{sarDetections.length}</span>
-          <span className="text-gray-500 ml-1">SAR</span>
-          {darkVessels.length > 0 && (
-            <>
-              <span className="mx-2 text-gray-600">|</span>
-              <span className="font-mono text-red-500">{darkVessels.length}</span>
-              <span className="text-red-400 ml-1">Dark</span>
-            </>
-          )}
+          <span className="font-mono text-amber-400">{sarScenes.length}</span>
+          <span className="ml-1 text-gray-500">SAR scenes</span>
+          <span className="mx-2 text-gray-600">|</span>
+          <span className="font-mono text-red-400">{darkVessels.length}</span>
+          <span className="ml-1 text-gray-500">Dark</span>
         </div>
       </div>
-      
-      {/* Legend */}
-      <div className="absolute top-4 right-4 z-[400]">
-        <div className="glass-panel p-3 rounded-lg space-y-2">
-          <p className="text-[10px] text-gray-500 uppercase font-semibold">Legend</p>
-          <div className="space-y-1">
-            {[
-              { color: '#06b6d4', label: 'Cargo' },
-              { color: '#f59e0b', label: 'Tanker' },
-              { color: '#10b981', label: 'Passenger' },
-              { color: '#a855f7', label: 'Fishing' },
-              { color: '#ef4444', label: 'Military' }
-            ].map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-[10px] text-gray-400">{label}</span>
-              </div>
-            ))}
-            {darkVessels.length > 0 && (
-              <div className="flex items-center gap-2 pt-1 border-t border-gray-700">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-[10px] text-red-400">Dark Vessel</span>
-              </div>
-            )}
+
+      <div className="absolute top-4 right-4 z-20">
+        <div className="glass-panel rounded-lg p-3 space-y-2">
+          <p className="text-[10px] font-semibold uppercase text-gray-500">Legend</p>
+          <div className="space-y-1.5 text-[10px] text-gray-400">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-cyan-400" />
+              <span>AIS Vessel</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-amber-400" />
+              <span>SAR Scene</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-red-400" />
+              <span>Dark Vessel</span>
+            </div>
           </div>
         </div>
       </div>

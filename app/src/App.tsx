@@ -20,6 +20,7 @@ function App() {
   
   // SAR detections with AI
   const { 
+    scenes,
     detections, 
     darkVessels, 
     comparison, 
@@ -160,6 +161,7 @@ function App() {
           <div className="flex-1 relative">
             <MapView
               ships={filteredShips}
+              sarScenes={scenes}
               sarDetections={detections}
               darkVessels={darkVessels}
               layers={layers}

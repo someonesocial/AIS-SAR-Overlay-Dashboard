@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AISShip, SARDetection } from '@/types';
+import type { AISShip, SARDetection, SARScene } from '@/types';
 
 function resolveApiBase() {
   return import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
@@ -20,6 +20,7 @@ function normalizeDetection(detection: any): SARDetection {
 }
 
 export function useSARDetections(ships: AISShip[]) {
+  const [scenes, setScenes] = useState<SARScene[]>([]);
   const [detections, setDetections] = useState<SARDetection[]>([]);
   const [darkVessels, setDarkVessels] = useState<SARDetection[]>([]);
   const [comparison, setComparison] = useState<any>(null);
@@ -34,6 +35,7 @@ export function useSARDetections(ships: AISShip[]) {
       const detectionData = await detectionsRes.json();
       const comparisonData = await comparisonRes.json();
 
+      setScenes(detectionData.scenes || []);
       setDetections((detectionData.detections || []).map(normalizeDetection));
       setDarkVessels((detectionData.darkVessels || []).map(normalizeDetection));
       setComparison(comparisonData.summary || comparisonData);
@@ -54,7 +56,7 @@ export function useSARDetections(ships: AISShip[]) {
     }
   }, [ships.length, detections.length, refresh]);
 
-  return { detections, darkVessels, comparison, refresh };
+  return { scenes, detections, darkVessels, comparison, refresh };
 }
 
 export function useDarkVesselDetection(_ships: AISShip[]) {

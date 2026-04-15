@@ -6,7 +6,6 @@
 const axios = require('axios');
 
 const ASF_API_URL = 'https://api.daac.asf.alaska.edu/services/search/param';
-const ASF_VERTEX_URL = 'https://api.daac.asf.alaska.edu/services/search/v1';
 
 // Cache for SAR data
 let sarDataCache = null;
@@ -47,28 +46,18 @@ async function searchSARData(bbox, options = {}) {
       timeout: 30000
     });
     
-    if (response.data && response.data.length > 0) {
-      console.log(`✅ Found ${response.data.length} SAR scenes`);
-      return response.data.map(scene => ({
-        id: scene.granuleName,
-        sceneName: scene.sceneName,
-        acquisitionDate: scene.acquisitionDate,
-        centerLat: scene.centerLat,
-        centerLon: scene.centerLon,
-        footprint: scene.footprint,
-        downloadUrl: scene.url,
-        fileSize: scene.sizeMB,
-        processingLevel: scene.processingLevel,
-        polarization: scene.polarization,
-        beamMode: scene.beamMode
-      }));
+    const rawScenes = normalizeASFResponse(response.data);
+
+    if (rawScenes.length > 0) {
+      console.log(`✅ Found ${rawScenes.length} SAR scenes`);
+      return rawScenes.map(mapScene);
     }
-    
+
+    console.log('ℹ️  No ASF SAR scenes found for the requested region/time range');
     return [];
   } catch (err) {
     console.error('❌ ASF Search error:', err.message);
-    // Return mock data if API fails
-    return generateMockSARData(bbox);
+    return [];
   }
 }
 
@@ -77,74 +66,53 @@ async function searchSARData(bbox, options = {}) {
  * Uses a simulated detection model (in production, use TensorFlow/PyTorch)
  */
 async function detectShipsInSAR(sarScene, aisShips = []) {
-  // In production, this would:
-  // 1. Download the SAR image
-  // 2. Preprocess (speckle filtering, calibration)
-  // 3. Run through a trained CNN (YOLO/Mask R-CNN)
-  // 4. Extract ship positions and confidence scores
-  
-  // For demo, we simulate detections based on AIS positions
-  // and add some "dark vessels" (ships detected in SAR but not in AIS)
-  
   const detections = [];
   const darkVessels = [];
   
-  // Match AIS ships to SAR detections
-  aisShips.forEach(ship => {
-    // Check if ship is within SAR scene footprint
-    if (isPointInScene(ship.latitude, ship.longitude, sarScene)) {
+  // 1. Generate some detections that match AIS ships in this scene
+  const shipsInScene = aisShips.filter(ship => isPointInScene(ship.latitude, ship.longitude, sarScene));
+  
+  // Match some of the AIS ships (say 80% detection rate)
+  shipsInScene.forEach(ship => {
+    if (Math.random() < 0.8) {
       detections.push({
-        id: `SAR-${sarScene.id}-${ship.mmsi}`,
-        latitude: ship.latitude + (Math.random() - 0.5) * 0.001,
+        id: `sar-det-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        sceneId: sarScene.id,
+        latitude: ship.latitude + (Math.random() - 0.5) * 0.001, // Slight offset
         longitude: ship.longitude + (Math.random() - 0.5) * 0.001,
-        confidence: 0.85 + Math.random() * 0.15,
-        timestamp: new Date(sarScene.acquisitionDate),
-        satellite: sarScene.sceneName?.includes('S1A') ? 'Sentinel-1A' : 'Sentinel-1C',
+        confidence: 0.8 + (Math.random() * 0.19), // 0.8 - 0.99
+        timestamp: sarScene.acquisitionDate,
         matchedMMSI: ship.mmsi,
-        isDarkVessel: false,
-        bbox: [
-          ship.longitude - 0.002,
-          ship.latitude - 0.002,
-          ship.longitude + 0.002,
-          ship.latitude + 0.002
-        ]
+        length: 100 + Math.random() * 150,
+        width: 20 + Math.random() * 30
       });
     }
   });
-  
-  // Generate dark vessels (ships visible in SAR but no AIS signal)
-  // These are vessels that have turned off their AIS transponders
-  const numDarkVessels = Math.floor(Math.random() * 5) + 2;
-  
+
+  // 2. Generate some "Dark Vessels" (SAR detections with no AIS match)
+  const numDarkVessels = Math.floor(Math.random() * 5) + 1; // 1-5 dark vessels per scene
   for (let i = 0; i < numDarkVessels; i++) {
-    const [lat, lon] = getRandomPointInScene(sarScene);
+    const point = getRandomPointInScene(sarScene);
+    const darkVessel = {
+      id: `sar-dark-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sceneId: sarScene.id,
+      latitude: point[0],
+      longitude: point[1],
+      confidence: 0.7 + (Math.random() * 0.25),
+      timestamp: sarScene.acquisitionDate,
+      matchedMMSI: null,
+      length: 50 + Math.random() * 100,
+      width: 10 + Math.random() * 20
+    };
     
-    // Check if this position doesn't match any known AIS ship
-    const nearbyAIS = aisShips.find(ship => 
-      Math.abs(ship.latitude - lat) < 0.01 && 
-      Math.abs(ship.longitude - lon) < 0.01
-    );
-    
-    if (!nearbyAIS) {
-      const darkVessel = {
-        id: `SAR-DARK-${sarScene.id}-${i}`,
-        latitude: lat,
-        longitude: lon,
-        confidence: 0.7 + Math.random() * 0.25,
-        timestamp: new Date(sarScene.acquisitionDate),
-        satellite: sarScene.sceneName?.includes('S1A') ? 'Sentinel-1A' : 'Sentinel-1C',
-        matchedMMSI: null,
-        isDarkVessel: true,
-        estimatedLength: 50 + Math.random() * 200,
-        estimatedType: ['cargo', 'tanker', 'fishing'][Math.floor(Math.random() * 3)],
-        bbox: [lon - 0.002, lat - 0.002, lon + 0.002, lat + 0.002]
-      };
-      
-      detections.push(darkVessel);
-      darkVessels.push(darkVessel);
-    }
+    detections.push(darkVessel);
+    darkVessels.push({
+      ...darkVessel,
+      possibleType: ['fishing', 'cargo', 'unknown'][Math.floor(Math.random() * 3)],
+      estimatedSpeed: Math.random() * 15
+    });
   }
-  
+
   return {
     scene: sarScene,
     detections,
@@ -200,28 +168,53 @@ function getRandomPointInScene(scene) {
 /**
  * Generate mock SAR data for demo/testing
  */
-function generateMockSARData(bbox) {
-  const now = new Date();
-  const scenes = [];
-  
-  for (let i = 0; i < 5; i++) {
-    const acquisitionTime = new Date(now.getTime() - i * 12 * 60 * 60 * 1000);
-    scenes.push({
-      id: `S1A_IW_GRDH_${acquisitionTime.toISOString().slice(0, 10).replace(/-/g, '')}_${String(i).padStart(6, '0')}`,
-      sceneName: `S1A_IW_GRDH_1SDV_${acquisitionTime.toISOString().slice(0, 10).replace(/-/g, '')}T${String(Math.floor(Math.random() * 24)).padStart(2, '0')}${String(Math.floor(Math.random() * 60)).padStart(2, '0')}${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
-      acquisitionDate: acquisitionTime.toISOString(),
-      centerLat: 25 + (Math.random() - 0.5) * 2,
-      centerLon: 56.5 + (Math.random() - 0.5) * 3,
-      footprint: `POLYGON((${bbox[0][1]} ${bbox[0][0]}, ${bbox[1][1]} ${bbox[0][0]}, ${bbox[1][1]} ${bbox[1][0]}, ${bbox[0][1]} ${bbox[1][0]}, ${bbox[0][1]} ${bbox[0][0]}))`,
-      downloadUrl: `https://datapool.asf.alaska.edu/GRD_HD/S1A/mock-${i}.zip`,
-      fileSize: 500 + Math.random() * 500,
-      processingLevel: 'GRD_HD',
-      polarization: 'VV+VH',
-      beamMode: 'IW'
-    });
+function normalizeASFResponse(data) {
+  if (Array.isArray(data)) {
+    return data.flatMap((item) => (Array.isArray(item) ? item : [item]));
   }
-  
-  return scenes;
+
+  if (Array.isArray(data?.features)) {
+    return data.features.map((feature) => ({
+      ...feature.properties,
+      geometry: feature.geometry
+    }));
+  }
+
+  if (Array.isArray(data?.results)) {
+    return data.results;
+  }
+
+  return [];
+}
+
+function mapScene(scene) {
+  const acquisitionDate = scene.acquisitionDate || scene.startTime || scene.stopTime || scene.processingDate;
+  const centerLat = Number(scene.centerLat ?? scene.center_lat ?? scene.lat ?? scene.geometry?.coordinates?.[1]);
+  const centerLon = Number(scene.centerLon ?? scene.center_lon ?? scene.lon ?? scene.geometry?.coordinates?.[0]);
+
+  return {
+    id: scene.granuleName || scene.sceneName || scene.fileID || scene.umm?.GranuleUR || `scene-${Date.now()}`,
+    sceneName: scene.sceneName || scene.granuleName || scene.fileID || 'Unknown Scene',
+    acquisitionDate,
+    centerLat,
+    centerLon,
+    footprint: scene.footprint || scene.stringFootprint || geometryToWkt(scene.geometry),
+    downloadUrl: scene.url || scene.downloadUrl || scene.metalink || scene.httpsUrl || '',
+    fileSize: scene.sizeMB || scene.bytes || null,
+    processingLevel: scene.processingLevel || scene.processingType || '',
+    polarization: scene.polarization || scene.polarizationType || '',
+    beamMode: scene.beamMode || scene.beamModeType || ''
+  };
+}
+
+function geometryToWkt(geometry) {
+  if (!geometry?.coordinates?.length) return null;
+
+  const rings = geometry.coordinates[0];
+  if (!Array.isArray(rings)) return null;
+
+  const serialized = rings.map(([lon, lat]) => `${lon} ${lat}`).join(', ');
+  return `POLYGON((${serialized}))`;
 }
 
 /**
@@ -239,6 +232,21 @@ async function getLatestSARWithDetections(bbox, aisShips = []) {
   
   // Fetch new data
   const scenes = await searchSARData(bbox);
+
+  if (scenes.length === 0) {
+    const emptyResult = {
+      scenes: [],
+      detections: [],
+      darkVessels: [],
+      totalDetections: 0,
+      darkVesselCount: 0,
+      timestamp: new Date().toISOString()
+    };
+
+    sarDataCache = { key: cacheKey, data: emptyResult };
+    lastFetchTime = now;
+    return emptyResult;
+  }
   
   // Run AI detection on each scene
   const results = await Promise.all(
