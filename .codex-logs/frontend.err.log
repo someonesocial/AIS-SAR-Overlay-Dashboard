@@ -1,9 +1,0 @@
-[31m(!) Failed to run dependency scan. Skipping dependency pre-bundling. Error: spawn EPERM
-    at ChildProcess.spawn (node:internal/child_process:421:11)
-    at Object.spawn (node:child_process:796:9)
-    at ensureServiceIsRunning (C:\Users\Paul Klemm\Privat\DHBW Mosbach Onlinemedien\D2 Data Science Projekt\AIS‑SAR Overlay Dashboard\app\node_modules\esbuild\lib\main.js:1978:29)
-    at Object.context (C:\Users\Paul Klemm\Privat\DHBW Mosbach Onlinemedien\D2 Data Science Projekt\AIS‑SAR Overlay Dashboard\app\node_modules\esbuild\lib\main.js:1877:33)
-    at prepareEsbuildScanner (file:///C:/Users/Paul%20Klemm/Privat/DHBW%20Mosbach%20Onlinemedien/D2%20Data%20Science%20Projekt/AIS%E2%80%91SAR%20Overlay%20Dashboard/app/node_modules/vite/dist/node/chunks/config.js:31453:23)
-    at async scan (file:///C:/Users/Paul%20Klemm/Privat/DHBW%20Mosbach%20Onlinemedien/D2%20Data%20Science%20Projekt/AIS%E2%80%91SAR%20Overlay%20Dashboard/app/node_modules/vite/dist/node/chunks/config.js:31379:14)
-    at async file:///C:/Users/Paul%20Klemm/Privat/DHBW%20Mosbach%20Onlinemedien/D2%20Data%20Science%20Projekt/AIS%E2%80%91SAR%20Overlay%20Dashboard/app/node_modules/vite/dist/node/chunks/config.js:34110:15[39m
-^C^C
