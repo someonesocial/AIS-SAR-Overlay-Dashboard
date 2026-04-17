@@ -3,6 +3,12 @@ echo ========================================================
 echo Eye of God - Easy Start
 echo =================================================.......
 echo.
+
+echo Cleaning up any old instances...
+taskkill /FI "WindowTitle eq AIS Server*" /T /F >nul 2>&1
+taskkill /FI "WindowTitle eq AIS Frontend*" /T /F >nul 2>&1
+
+echo.
 echo Make sure you have Node.js installed and set up your
 echo app/.env with AISSTREAM_API_KEY!
 echo.

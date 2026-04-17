@@ -1,4 +1,4 @@
-import { Radar, Settings, User, RefreshCw, AlertTriangle, Eye } from 'lucide-react';
+import { Radar, Settings, User, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ConnectionStatus } from '@/types';
 
@@ -7,15 +7,13 @@ interface HeaderProps {
   statusMessage?: string;
   onRefresh: () => void;
   darkVesselCount?: number;
-  onToggleDarkVesselPanel?: () => void;
 }
 
 export function Header({ 
   connectionStatus, 
   statusMessage,
   onRefresh,
-  darkVesselCount = 0,
-  onToggleDarkVesselPanel
+  darkVesselCount = 0
 }: HeaderProps) {
   const statusConfig = {
     online: { color: 'text-emerald-500', bg: 'bg-emerald-500', label: 'Online' },
@@ -57,21 +55,8 @@ export function Header({
         <div className="hidden md:flex items-center gap-4 text-xs text-gray-400">
           <span>AIS: <span className="text-cyan-400">LIVE</span></span>
           <span>SAR: <span className="text-amber-400">ACTIVE</span></span>
-          <span>AI: <span className="text-emerald-400">RUNNING</span></span>
+          <span>API: <span className="text-emerald-400">CONNECTED</span></span>
         </div>
-        
-        {/* Dark Vessel Alert */}
-        {darkVesselCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
-            onClick={onToggleDarkVesselPanel}
-          >
-            <AlertTriangle className="w-4 h-4 mr-1.5" />
-            <span className="text-xs font-medium">{darkVesselCount} Dark Vessels</span>
-          </Button>
-        )}
       </div>
       
       {/* Right Actions */}
@@ -84,15 +69,6 @@ export function Header({
           disabled={connectionStatus === 'connecting'}
         >
           <RefreshCw className={`w-4 h-4 ${connectionStatus === 'connecting' ? 'animate-spin' : ''}`} />
-        </Button>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
-          onClick={onToggleDarkVesselPanel}
-        >
-          <Eye className="w-4 h-4" />
         </Button>
         
         <Button

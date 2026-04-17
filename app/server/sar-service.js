@@ -178,7 +178,12 @@ function mapScene(scene) {
     processingLevel: scene.processingLevel || scene.processingType || "",
     polarization: scene.polarization || scene.polarizationType || "",
     beamMode: scene.beamMode || scene.beamModeType || "",
-    browseUrl: typeof scene.browse === 'string' ? scene.browse : (Array.isArray(scene.browse) && scene.browse.length > 0 ? scene.browse[0] : scene.browseUrl || null)
+    browseUrl:
+      typeof scene.browse === "string"
+        ? scene.browse
+        : Array.isArray(scene.browse) && scene.browse.length > 0
+          ? scene.browse[0]
+          : scene.browseUrl || null,
   };
 }
 

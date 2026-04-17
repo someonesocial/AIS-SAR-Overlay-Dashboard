@@ -48,11 +48,11 @@ let aisSocket = null;
 let isConnected = false;
 let reconnectTimeout = null;
 
-
-
 function connectToAISStream() {
   if (!API_KEY) {
-    console.warn("⚠️  Warning: AISSTREAM_API_KEY not set. Cannot stream live data.");
+    console.warn(
+      "⚠️  Warning: AISSTREAM_API_KEY not set. Cannot stream live data.",
+    );
     return;
   }
 
@@ -129,7 +129,11 @@ wss.on("connection", (ws, req) => {
   ws.send(
     JSON.stringify({
       type: "connection",
-      status: API_KEY ? (isConnected ? "connected" : "connecting") : "disconnected",
+      status: API_KEY
+        ? isConnected
+          ? "connected"
+          : "connecting"
+        : "disconnected",
       message: API_KEY ? "Connected to AIS Stream" : "API Key Missing",
       timestamp: new Date().toISOString(),
     }),

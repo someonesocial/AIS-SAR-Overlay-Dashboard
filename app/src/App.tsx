@@ -3,9 +3,8 @@ import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
 import { MapView } from '@/components/MapView';
 import { BottomPanel } from '@/components/BottomPanel';
-import { DarkVesselPanel } from '@/components/DarkVesselPanel';
 import { useRealTimeAIS } from '@/hooks/useRealTimeAIS';
-import { useSARDetections, useDarkVesselDetection } from '@/hooks/useSARDetections';
+import { useSARDetections } from '@/hooks/useSARDetections';
 import { useMapLayers } from '@/hooks/useMapLayers';
 import { Toaster } from '@/components/ui/sonner';
 import type { FilterState } from '@/types';
@@ -27,12 +26,6 @@ function App() {
     refresh: refreshSAR 
   } = useSARDetections(ships);
   
-  // Dark vessel detection
-  const {
-    darkVessels: detectedDarkVessels,
-    stats: darkVesselStats
-  } = useDarkVesselDetection(ships);
-  
   // Map layers
   const {
     layers,
@@ -51,9 +44,6 @@ function App() {
   
   // Selected ship
   const [selectedShipMMSI, setSelectedShipMMSI] = useState<string | null>(null);
-  
-  // Show dark vessel panel
-  const [showDarkVesselPanel, setShowDarkVesselPanel] = useState(false);
   
   // Filter ships
   const filteredShips = useMemo(() => {
@@ -135,7 +125,6 @@ function App() {
         statusMessage={statusMessage}
         onRefresh={refreshData}
         darkVesselCount={darkVessels.length}
-        onToggleDarkVesselPanel={() => setShowDarkVesselPanel(!showDarkVesselPanel)}
       />
       
       {/* Main Content */}
@@ -184,18 +173,6 @@ function App() {
           />
         </div>
         
-        {/* Dark Vessel Panel */}
-        {showDarkVesselPanel && (
-          <DarkVesselPanel
-            darkVessels={detectedDarkVessels}
-            stats={darkVesselStats}
-            onClose={() => setShowDarkVesselPanel(false)}
-            onSelectLocation={(lat, lon) => {
-              // Could pan map to location
-              console.log('Navigate to:', lat, lon);
-            }}
-          />
-        )}
       </div>
       
       {/* Toast notifications */}

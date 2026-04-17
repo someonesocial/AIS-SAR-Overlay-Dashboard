@@ -23,11 +23,11 @@ const wss = new WebSocket.Server({ server, path: "/ws" });
 const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 const API_KEY = process.env.AISSTREAM_API_KEY;
-// Expand bounding box to global to get consistent data
+// Track ships in the Strait of Hormuz
 const AIS_BOUNDING_BOXES = [
   [
-    [-90, -180],
-    [90, 180],
+    [23, 54],
+    [27, 59],
   ],
 ];
 
@@ -45,7 +45,9 @@ let isConnected = false;
 
 function connectToAISStream() {
   if (!API_KEY) {
-    console.log("⚠️  No AISSTREAM_API_KEY provided. Continuing without AIS feed.");
+    console.log(
+      "⚠️  No AISSTREAM_API_KEY provided. Continuing without AIS feed.",
+    );
     return;
   }
 
@@ -70,7 +72,8 @@ function connectToAISStream() {
       broadcastStatus("connected", "Connected to AIS Stream");
     });
 
-    aisSocket.on("message", (data) => {      try {
+    aisSocket.on("message", (data) => {
+      try {
         const message = JSON.parse(data.toString());
         if (message.error || message.Error) {
           const errorMessage = message.error || message.Error;
@@ -148,7 +151,11 @@ wss.on("connection", (ws, req) => {
   ws.send(
     JSON.stringify({
       type: "connection",
-      status: API_KEY ? (isConnected ? "connected" : "connecting") : "disconnected",
+      status: API_KEY
+        ? isConnected
+          ? "connected"
+          : "connecting"
+        : "disconnected",
       clientId,
       timestamp: new Date().toISOString(),
     }),
