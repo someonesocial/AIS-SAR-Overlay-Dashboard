@@ -45,8 +45,7 @@ let isConnected = false;
 
 function connectToAISStream() {
   if (!API_KEY) {
-    console.log("⚠️  No AISSTREAM_API_KEY, using demo mode");
-    startDemoMode();
+    console.log("⚠️  No AISSTREAM_API_KEY provided. Continuing without AIS feed.");
     return;
   }
 
@@ -69,9 +68,7 @@ function connectToAISStream() {
       aisSocket.send(JSON.stringify(subscribeMessage));
       console.log("📤 Subscription sent:", JSON.stringify(subscribeMessage));
       broadcastStatus("connected", "Connected to AIS Stream");
-
-      // Also start demo mode so the user sees traffic in the correct area
-      startDemoMode();    });
+    });
 
     aisSocket.on("message", (data) => {      try {
         const message = JSON.parse(data.toString());
@@ -105,7 +102,6 @@ function connectToAISStream() {
     });
   } catch (err) {
     console.error("❌ Failed to connect:", err.message);
-    startDemoMode();
   }
 }
 
@@ -141,61 +137,6 @@ function processAISMessage(message) {
   }
 }
 
-function startDemoMode() {
-  console.log("📡 Starting demo AIS data...");
-  broadcastStatus("demo", "Demo Mode - Simulated Data");
-
-  const shipTypes = ["cargo", "tanker", "passenger", "fishing"];
-  const shipNames = ["MAERSK", "EVERGREEN", "COSCO", "MSC", "CMA CGM"];
-
-  const demoShips = Array.from({ length: 30 }, (_, i) => ({
-    mmsi: (200000000 + i).toString(),
-    name: `${shipNames[i % shipNames.length]} ${100 + i}`,
-    type: shipTypes[i % shipTypes.length],
-    latitude: 25 + (Math.random() - 0.5) * 3,
-    longitude: 56.5 + (Math.random() - 0.5) * 4,
-    course: Math.random() * 360,
-    speed: Math.random() * 20,
-    heading: Math.random() * 360,
-    status: Math.floor(Math.random() * 8),
-  }));
-
-  setInterval(() => {
-    demoShips.forEach((ship) => {
-      // Update position
-      const distance = ship.speed / 60 / 111;
-      ship.latitude += distance * Math.cos((ship.course * Math.PI) / 180);
-      ship.longitude +=
-        (distance * Math.sin((ship.course * Math.PI) / 180)) /
-        Math.cos((ship.latitude * Math.PI) / 180);
-
-      const message = {
-        MessageType: "PositionReport",
-        Message: {
-          PositionReport: {
-            Latitude: ship.latitude,
-            Longitude: ship.longitude,
-            Cog: ship.course,
-            Sog: ship.speed,
-            TrueHeading: ship.heading,
-            NavigationalStatus: ship.status,
-            UserID: parseInt(ship.mmsi),
-          },
-        },
-        MetaData: {
-          MMSI: ship.mmsi,
-          ShipName: ship.name,
-          ShipType: ship.type,
-          time_utc: new Date().toISOString(),
-        },
-      };
-
-      processAISMessage(message);
-      broadcastToClients(JSON.stringify(message));
-    });
-  }, 3000);
-}
-
 // ==================== WebSocket Client Handling ====================
 
 wss.on("connection", (ws, req) => {
@@ -207,7 +148,7 @@ wss.on("connection", (ws, req) => {
   ws.send(
     JSON.stringify({
       type: "connection",
-      status: API_KEY ? (isConnected ? "connected" : "connecting") : "demo",
+      status: API_KEY ? (isConnected ? "connected" : "connecting") : "disconnected",
       clientId,
       timestamp: new Date().toISOString(),
     }),
@@ -249,7 +190,7 @@ function broadcastStatus(status, message) {
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    ais: isConnected ? "connected" : API_KEY ? "connecting" : "demo",
+    ais: isConnected ? "connected" : API_KEY ? "connecting" : "disconnected",
     shipsTracked: shipsCache.size,
     timestamp: new Date().toISOString(),
   });

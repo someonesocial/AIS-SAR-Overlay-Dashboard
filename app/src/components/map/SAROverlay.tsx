@@ -118,17 +118,16 @@ export function SAROverlay({
       polygon.addTo(map);
       overlaysRef.current.push(polygon);
 
-      // Radar Satellite Image Overlay
-      const bounds = polygon.getBounds();
-      // Use real browse image if available, else use a simulated noisy grayscale water texture
-      const browseUrl = scene.browseUrl || 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?auto=format&fit=crop&q=80&w=800&grayscale=1&bri=-20&con=40';
-      
-      const imageOverlay = L.imageOverlay(browseUrl, bounds, {
-        opacity: opacity * 0.45,
-        interactive: false
-      });
-      imageOverlay.addTo(map);
-      overlaysRef.current.push(imageOverlay);
+      if (scene.browseUrl) {
+        // Radar Satellite Image Overlay
+        const bounds = polygon.getBounds();
+        const imageOverlay = L.imageOverlay(scene.browseUrl, bounds, {
+          opacity: opacity * 0.45,
+          interactive: false
+        });
+        imageOverlay.addTo(map);
+        overlaysRef.current.push(imageOverlay);
+      }
 
       if (scene.centerLat && scene.centerLon) {
         const centerLabel = L.marker([scene.centerLat, scene.centerLon], {

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { AISShip } from '@/types';
-import { shipTypeConfig } from '@/data/mockData';
+import { shipTypeConfig } from '@/data/constants';
 
 interface ShipMarkersProps {
   ships: AISShip[];

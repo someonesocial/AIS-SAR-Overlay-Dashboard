@@ -64,67 +64,16 @@ async function searchSARData(bbox, options = {}) {
 }
 
 /**
- * AI Ship Detection on SAR imagery
- * Uses a simulated detection model (in production, use TensorFlow/PyTorch)
+ * Ship Detection on SAR imagery
+ * Currently acts as a pass-through since there's no actual AI detection service implemented.
  */
 async function detectShipsInSAR(sarScene, aisShips = []) {
-  const detections = [];
-  const darkVessels = [];
-
-  // 1. Generate some detections that match AIS ships in this scene
-  const shipsInScene = aisShips.filter((ship) =>
-    isPointInScene(ship.latitude, ship.longitude, sarScene),
-  );
-
-  // Match some of the AIS ships (say 80% detection rate)
-  shipsInScene.forEach((ship) => {
-    if (Math.random() < 0.8) {
-      detections.push({
-        id: `sar-det-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        sceneId: sarScene.id,
-        latitude: ship.latitude + (Math.random() - 0.5) * 0.001, // Slight offset
-        longitude: ship.longitude + (Math.random() - 0.5) * 0.001,
-        confidence: 0.8 + Math.random() * 0.19, // 0.8 - 0.99
-        timestamp: sarScene.acquisitionDate,
-        matchedMMSI: ship.mmsi,
-        length: 100 + Math.random() * 150,
-        width: 20 + Math.random() * 30,
-      });
-    }
-  });
-
-  // 2. Generate some "Dark Vessels" (SAR detections with no AIS match)
-  const numDarkVessels = Math.floor(Math.random() * 5) + 1; // 1-5 dark vessels per scene
-  for (let i = 0; i < numDarkVessels; i++) {
-    const point = getRandomPointInScene(sarScene);
-    const darkVessel = {
-      id: `sar-dark-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      sceneId: sarScene.id,
-      latitude: point[0],
-      longitude: point[1],
-      confidence: 0.7 + Math.random() * 0.25,
-      timestamp: sarScene.acquisitionDate,
-      matchedMMSI: null,
-      length: 50 + Math.random() * 100,
-      width: 10 + Math.random() * 20,
-    };
-
-    detections.push(darkVessel);
-    darkVessels.push({
-      ...darkVessel,
-      possibleType: ["fishing", "cargo", "unknown"][
-        Math.floor(Math.random() * 3)
-      ],
-      estimatedSpeed: Math.random() * 15,
-    });
-  }
-
   return {
     scene: sarScene,
-    detections,
-    darkVessels,
-    matchedCount: detections.length - darkVessels.length,
-    darkVesselCount: darkVessels.length,
+    detections: [],
+    darkVessels: [],
+    matchedCount: 0,
+    darkVesselCount: 0,
   };
 }
 
@@ -169,7 +118,7 @@ function getRandomPointInScene(scene) {
 }
 
 /**
- * Generate mock SAR data for demo/testing
+ * Generate standardized SAR data format
  */
 function normalizeASFResponse(data) {
   if (Array.isArray(data)) {

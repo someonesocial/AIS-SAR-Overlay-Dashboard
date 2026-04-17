@@ -21,7 +21,7 @@ const API_KEY = process.env.AISSTREAM_API_KEY;
 
 if (!API_KEY) {
   console.warn(
-    "⚠️  Warning: AISSTREAM_API_KEY not set. Using demo mode with mock data.",
+    "⚠️  Warning: AISSTREAM_API_KEY not set. Cannot stream live data.",
   );
 }
 
@@ -31,7 +31,7 @@ const server = http.createServer((req, res) => {
   res.end(
     JSON.stringify({
       status: "AIS Proxy Server Running",
-      mode: API_KEY ? "live" : "demo",
+      mode: API_KEY ? "live" : "disconnected",
       timestamp: new Date().toISOString(),
     }),
   );
@@ -48,87 +48,11 @@ let aisSocket = null;
 let isConnected = false;
 let reconnectTimeout = null;
 
-// Mock ship data for demo mode
-const mockShips = generateMockShips();
-let mockInterval = null;
 
-function generateMockShips() {
-  const shipTypes = ["cargo", "tanker", "passenger", "fishing"];
-  const shipNames = [
-    "MAERSK",
-    "EVERGREEN",
-    "COSCO",
-    "MSC",
-    "CMA CGM",
-    "HAPAG",
-    "ONE",
-    "ZIM",
-    "YANG MING",
-    "PIL",
-  ];
-
-  return Array.from({ length: 50 }, (_, i) => ({
-    Message: {
-      PositionReport: {
-        Cog: Math.random() * 360,
-        Latitude: 25 + (Math.random() - 0.5) * 3,
-        Longitude: 56.5 + (Math.random() - 0.5) * 4,
-        MessageID: 1,
-        NavigationalStatus: Math.floor(Math.random() * 8),
-        Sog: Math.random() * 25,
-        TrueHeading: Math.random() * 360,
-        UserID: 200000000 + Math.floor(Math.random() * 99999999),
-      },
-    },
-    MessageType: "PositionReport",
-    MetaData: {
-      MMSI: (200000000 + Math.floor(Math.random() * 99999999)).toString(),
-      ShipName: `${shipNames[Math.floor(Math.random() * shipNames.length)]} ${Math.floor(Math.random() * 999)}`,
-      ShipType: shipTypes[Math.floor(Math.random() * shipTypes.length)],
-      latitude: 25 + (Math.random() - 0.5) * 3,
-      longitude: 56.5 + (Math.random() - 0.5) * 4,
-      time_utc: new Date().toISOString(),
-    },
-  }));
-}
-
-function startMockData() {
-  console.log("📡 Starting mock AIS data stream...");
-
-  mockInterval = setInterval(() => {
-    // Update ship positions
-    mockShips.forEach((ship) => {
-      const speed = ship.Message.PositionReport.Sog;
-      const course = ship.Message.PositionReport.Cog;
-      const distance = speed / 60 / 111; // nautical miles to degrees
-
-      ship.Message.PositionReport.Latitude +=
-        distance * Math.cos((course * Math.PI) / 180);
-      ship.Message.PositionReport.Longitude +=
-        (distance * Math.sin((course * Math.PI) / 180)) /
-        Math.cos((ship.Message.PositionReport.Latitude * Math.PI) / 180);
-      ship.MetaData.latitude = ship.Message.PositionReport.Latitude;
-      ship.MetaData.longitude = ship.Message.PositionReport.Longitude;
-      ship.MetaData.time_utc = new Date().toISOString();
-    });
-
-    // Broadcast to all clients
-    mockShips.forEach((ship) => {
-      broadcast(JSON.stringify(ship));
-    });
-  }, 2000);
-}
-
-function stopMockData() {
-  if (mockInterval) {
-    clearInterval(mockInterval);
-    mockInterval = null;
-  }
-}
 
 function connectToAISStream() {
   if (!API_KEY) {
-    startMockData();
+    console.warn("⚠️  Warning: AISSTREAM_API_KEY not set. Cannot stream live data.");
     return;
   }
 
@@ -184,8 +108,6 @@ function connectToAISStream() {
     });
   } catch (err) {
     console.error("❌ Failed to connect to AIS Stream:", err.message);
-    // Fall back to mock data
-    startMockData();
   }
 }
 
@@ -207,8 +129,8 @@ wss.on("connection", (ws, req) => {
   ws.send(
     JSON.stringify({
       type: "connection",
-      status: API_KEY ? (isConnected ? "connected" : "connecting") : "demo",
-      message: API_KEY ? "Connected to AIS Stream" : "Running in demo mode",
+      status: API_KEY ? (isConnected ? "connected" : "connecting") : "disconnected",
+      message: API_KEY ? "Connected to AIS Stream" : "API Key Missing",
       timestamp: new Date().toISOString(),
     }),
   );
@@ -236,7 +158,6 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on("SIGINT", () => {
   console.log("\n🛑 Shutting down...");
-  stopMockData();
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
   if (aisSocket) aisSocket.close();
   server.close(() => {

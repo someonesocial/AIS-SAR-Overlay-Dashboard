@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import type { MapLayer, AISShip, FilterState, Statistics, ShipType, NavigationStatus, SARDetection } from '@/types';
-import { shipTypeConfig, statusLabels } from '@/data/mockData';
+import { shipTypeConfig, statusLabels } from '@/data/constants';
 
 interface SidebarProps {
   layers: MapLayer[];

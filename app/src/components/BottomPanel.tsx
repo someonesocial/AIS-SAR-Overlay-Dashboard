@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AISShip, SARDetection, Statistics } from '@/types';
-import { shipTypeConfig, statusLabels } from '@/data/mockData';
+import { shipTypeConfig, statusLabels } from '@/data/constants';
 import { 
   BarChart, 
   Bar, 

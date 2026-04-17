@@ -118,16 +118,16 @@ export function useRealTimeAIS() {
       const payload = JSON.parse(event.data);
 
       if (payload.type === 'connection') {
-        const connected = payload.status === 'connected' || payload.status === 'demo';
+        const connected = payload.status === 'connected';
         setConnectionStatus(connected ? 'online' : 'connecting');
         setStatusMessage(
-          payload.status === 'demo' ? 'Demo Mode - Simulated AIS Feed' : 'Live AIS stream connected'
+          payload.status === 'connected' ? 'Live AIS stream connected' : 'Disconnected from AIS stream'
         );
         return;
       }
 
       if (payload.type === 'status') {
-        if (payload.status === 'connected' || payload.status === 'demo') {
+        if (payload.status === 'connected') {
           setConnectionStatus('online');
         } else if (payload.status === 'reconnecting') {
           setConnectionStatus('connecting');
