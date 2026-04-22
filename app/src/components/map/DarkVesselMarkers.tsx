@@ -120,11 +120,14 @@ export function DarkVesselMarkers({ vessels, opacity = 0.9 }: DarkVesselMarkersP
     });
     
     markersRef.current = newMarkers;
-    
-    return () => {
-      newMarkers.forEach(marker => marker.remove());
-    };
   }, [vessels, map, opacity]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+    };
+  }, []);
   
   return null;
 }

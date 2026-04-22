@@ -199,11 +199,14 @@ export function SAROverlay({
     });
     
     markersRef.current = newMarkers;
-    
-    return () => {
-      newMarkers.forEach(marker => marker.remove());
-    };
   }, [detections, showDetections, map, detectionOpacity]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+    };
+  }, []);
   
   return null;
 }

@@ -212,7 +212,12 @@ app.get("/api/ships", (req, res) => {
 // Get SAR data with AI detections
 app.get("/api/sar/detections", async (req, res) => {
   try {
-    const { minLat = 54.0, maxLat = 59.0, minLon = 10.0, maxLon = 20.0 } = req.query;
+    const {
+      minLat = 54.0,
+      maxLat = 59.0,
+      minLon = 10.0,
+      maxLon = 20.0,
+    } = req.query;
 
     const bbox = [
       [parseFloat(minLat), parseFloat(minLon)],
@@ -235,7 +240,12 @@ app.get("/api/sar/detections", async (req, res) => {
 // Get dark vessels (SAR detections without AIS match)
 app.get("/api/dark-vessels", async (req, res) => {
   try {
-    const { minLat = 54.0, maxLat = 59.0, minLon = 10.0, maxLon = 20.0 } = req.query;
+    const {
+      minLat = 54.0,
+      maxLat = 59.0,
+      minLon = 10.0,
+      maxLon = 20.0,
+    } = req.query;
 
     const bbox = [
       [parseFloat(minLat), parseFloat(minLon)],

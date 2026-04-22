@@ -139,12 +139,15 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
     
     markersRef.current = newMarkers;
     tracksRef.current = newTracks;
-    
-    return () => {
-      newMarkers.forEach(marker => marker.remove());
-      newTracks.forEach(track => track.remove());
-    };
   }, [ships, selectedMMSI, onSelectShip, map, opacity]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach(marker => marker.remove());
+      tracksRef.current.forEach(track => track.remove());
+    };
+  }, []);
   
   return null;
 }
