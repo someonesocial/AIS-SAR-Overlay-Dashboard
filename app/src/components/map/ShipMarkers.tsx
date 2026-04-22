@@ -15,25 +15,39 @@ interface ShipMarkersProps {
 function createShipIcon(type: string, course: number, isSelected: boolean, opacity: number): L.DivIcon {
   const config = shipTypeConfig[type as keyof typeof shipTypeConfig] || shipTypeConfig.other;
   const color = config.color;
-  
-  const size = isSelected ? 24 : 16;
-  const strokeWidth = isSelected ? 2.5 : 1.5;
-  
+
+  const size = isSelected ? 28 : 16;
+  const triangleSize = isSelected ? 18 : 12;
+  const center = size / 2;
+  const strokeWidth = isSelected ? 3 : 1.5;
+  const haloRadius = isSelected ? 11 : 0;
+
   // Triangle pointing in direction of travel
   const svg = `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="transform: rotate(${course}deg); overflow: visible;">
+      ${isSelected ? `
+        <circle
+          cx="${center}"
+          cy="${center}"
+          r="${haloRadius}"
+          fill="${color}"
+          opacity="0.18"
+        />
+      ` : ''}
       <polygon 
-        points="${size/2},0 ${size},${size} 0,${size}" 
+        points="${center},${center - triangleSize / 2} ${center + triangleSize / 2},${center + triangleSize / 2} ${center - triangleSize / 2},${center + triangleSize / 2}" 
         fill="${color}" 
         stroke="white" 
         stroke-width="${strokeWidth}"
         opacity="${opacity}"
+        filter="${isSelected ? 'url(#selectedShipGlow)' : 'none'}"
       />
       ${isSelected ? `
-        <circle cx="${size/2}" cy="${size/2}" r="${size}" fill="none" stroke="${color}" stroke-width="1" opacity="0.5">
-          <animate attributeName="r" from="${size}" to="${size * 2}" dur="1.5s" repeatCount="indefinite"/>
-          <animate attributeName="opacity" from="0.5" to="0" dur="1.5s" repeatCount="indefinite"/>
-        </circle>
+        <defs>
+          <filter id="selectedShipGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="${color}" flood-opacity="0.75" />
+          </filter>
+        </defs>
       ` : ''}
     </svg>
   `;
@@ -106,28 +120,36 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
         if (needsIconUpdate) {
           marker.setIcon(createShipIcon(ship.type, ship.course, isSelected, opacity));
         }
+
+        marker.setZIndexOffset(isSelected ? 1000 : 0);
       } else {
         // Create new marker
         marker = L.marker(position, {
-          icon: createShipIcon(ship.type, ship.course, isSelected, opacity)
+          icon: createShipIcon(ship.type, ship.course, isSelected, opacity),
+          zIndexOffset: isSelected ? 1000 : 0
         });
         
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
           onSelectShip(ship.mmsi);
+          marker?.openPopup();
         });
         
-        // Tooltip
-        marker.bindTooltip(`
-          <div class="text-xs">
-            <p class="font-semibold">${ship.name}</p>
-            <p class="text-gray-400">${ship.mmsi}</p>
-            <p>${ship.speed.toFixed(1)} kn | ${ship.course.toFixed(0)}°</p>
+        // Popup with ship details
+        marker.bindPopup(`
+          <div class="text-xs min-w-[180px]">
+            <p class="font-semibold text-white">${ship.name}</p>
+            <p class="text-gray-400 font-mono">${ship.mmsi}</p>
+            <div class="mt-2 space-y-0.5">
+              <p>Type: <span class="text-cyan-300 font-medium">${shipTypeConfig[ship.type]?.label || ship.type}</span></p>
+              <p>${ship.speed.toFixed(1)} kn | ${ship.course.toFixed(0)}°</p>
+            </div>
           </div>
         `, {
-          direction: 'top',
           offset: [0, -10],
-          className: 'bg-gray-900 text-white border border-gray-700 rounded px-2 py-1'
+          closeButton: false,
+          autoPan: false,
+          className: 'ship-popup bg-gray-900 text-white border border-gray-700 rounded px-2 py-1'
         });
         
         marker.addTo(map);
