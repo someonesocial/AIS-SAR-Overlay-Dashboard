@@ -5,7 +5,31 @@ function resolveApiBase() {
   return import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
 }
 
-function normalizeDetection(detection: any): SARDetection {
+type RawDetection = {
+  id?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  confidence?: number | string;
+  satellite?: string;
+  timestamp?: string | number;
+  matchedMMSI?: string | null;
+  estimatedLength?: number;
+  estimatedType?: SARDetection['estimatedType'];
+};
+
+type ComparisonSummary = {
+  totalAIS: number;
+  totalSARDetections: number;
+  matched: number;
+  darkVessels: number;
+  aisWithoutSAR: number;
+};
+
+type ComparisonResponse = {
+  summary?: ComparisonSummary;
+};
+
+function normalizeDetection(detection: RawDetection): SARDetection {
   return {
     id: detection.id || crypto.randomUUID(),
     latitude: Number(detection.latitude),
@@ -23,7 +47,7 @@ export function useSARDetections(ships: AISShip[]) {
   const [scenes, setScenes] = useState<SARScene[]>([]);
   const [detections, setDetections] = useState<SARDetection[]>([]);
   const [darkVessels, setDarkVessels] = useState<SARDetection[]>([]);
-  const [comparison, setComparison] = useState<any>(null);
+  const [comparison, setComparison] = useState<ComparisonSummary | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -32,34 +56,46 @@ export function useSARDetections(ships: AISShip[]) {
         fetch(`${resolveApiBase()}/api/comparison`)
       ]);
 
-      const detectionData = await detectionsRes.json();
-      const comparisonData = await comparisonRes.json();
+      const detectionData = (await detectionsRes.json()) as {
+        scenes?: SARScene[];
+        detections?: RawDetection[];
+        darkVessels?: RawDetection[];
+      };
+      const comparisonData = (await comparisonRes.json()) as ComparisonResponse & Record<string, unknown>;
 
       setScenes(detectionData.scenes || []);
       setDetections((detectionData.detections || []).map(normalizeDetection));
       setDarkVessels((detectionData.darkVessels || []).map(normalizeDetection));
-      setComparison(comparisonData.summary || comparisonData);
+      setComparison((comparisonData.summary || comparisonData) as ComparisonSummary);
     } catch {
       setComparison(null);
     }
   }, []);
 
   useEffect(() => {
-    refresh();
+    const timeout = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     const interval = window.setInterval(refresh, 30000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
   }, [refresh]);
 
   useEffect(() => {
     if (ships.length > 0 && detections.length === 0) {
-      refresh();
+      const timeout = window.setTimeout(() => {
+        void refresh();
+      }, 0);
+      return () => window.clearTimeout(timeout);
     }
   }, [ships.length, detections.length, refresh]);
 
   return { scenes, detections, darkVessels, comparison, refresh };
 }
 
-export function useDarkVesselDetection(_ships: AISShip[]) {
+export function useDarkVesselDetection() {
   const [darkVessels, setDarkVessels] = useState<SARDetection[]>([]);
   const [stats, setStats] = useState({
     totalAIS: 0,
@@ -92,9 +128,14 @@ export function useDarkVesselDetection(_ships: AISShip[]) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    const timeout = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     const interval = window.setInterval(refresh, 45000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
   }, [refresh]);
 
   return useMemo(() => ({ darkVessels, stats }), [darkVessels, stats]);

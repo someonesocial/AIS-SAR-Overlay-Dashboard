@@ -7,25 +7,31 @@ interface HeatmapLayerProps {
   ships: AISShip[];
 }
 
+interface HeatmapCanvasLayer extends L.Layer {
+  _ctx?: CanvasRenderingContext2D | null;
+  _canvas?: HTMLCanvasElement | null;
+}
+
 // Simple heatmap implementation using canvas with throttling
 export function HeatmapLayer({ ships }: HeatmapLayerProps) {
   const map = useMap();
-  const layerRef = useRef<L.Layer | null>(null);
+  const layerRef = useRef<HeatmapCanvasLayer | null>(null);
   const lastDrawTimeRef = useRef<number>(0);
   const pendingDrawRef = useRef<boolean>(false);
   const moveHandlerRef = useRef<(() => void) | null>(null);
   const zoomHandlerRef = useRef<(() => void) | null>(null);
   const shipsRef = useRef<AISShip[]>([]);
   
-  // Update ships reference without triggering redraws immediately
-  shipsRef.current = ships;
+  // Keep the latest ship list available to the drawing routine.
+  useEffect(() => {
+    shipsRef.current = ships;
+  }, [ships]);
   
   const draw = useCallback(() => {
-    const layer = layerRef.current as any;
+    const layer = layerRef.current;
     if (!layer?._ctx || !layer?._canvas) return;
-    
-    const ctx = layer._ctx;
-    const canvas = layer._canvas;
+
+    const { _ctx: ctx, _canvas: canvas } = layer;
     const size = map.getSize();
     
     // Resize canvas
@@ -72,16 +78,20 @@ export function HeatmapLayer({ ships }: HeatmapLayerProps) {
   
   useEffect(() => {
     // Create custom layer
-    const HeatmapLayer = L.Layer.extend({
-      onAdd: function() {
+    let layerInstance: HeatmapCanvasLayer | null = null;
+    const HeatmapLayerImpl = L.Layer.extend({
+      onAdd() {
         const pane = map.getPane('overlayPane');
         if (!pane) return;
+
+        const layer = layerInstance;
+        if (!layer) return;
         
         const canvas = L.DomUtil.create('canvas', 'leaflet-heatmap-layer');
         canvas.style.position = 'absolute';
         
-        this._canvas = canvas;
-        this._ctx = canvas.getContext('2d');
+        layer._canvas = canvas;
+        layer._ctx = canvas.getContext('2d');
         
         pane.appendChild(canvas);
         
@@ -95,9 +105,10 @@ export function HeatmapLayer({ ships }: HeatmapLayerProps) {
         map.on('zoomend', handleZoomEnd);
       },
       
-      onRemove: function() {
-        if (this._canvas) {
-          L.DomUtil.remove(this._canvas);
+      onRemove() {
+        const layer = layerInstance;
+        if (layer?._canvas) {
+          L.DomUtil.remove(layer._canvas);
         }
         if (moveHandlerRef.current) {
           map.off('moveend', moveHandlerRef.current);
@@ -108,7 +119,8 @@ export function HeatmapLayer({ ships }: HeatmapLayerProps) {
       }
     });
     
-    const layer = new HeatmapLayer();
+    const layer = new (HeatmapLayerImpl as unknown as { new (): HeatmapCanvasLayer })();
+    layerInstance = layer;
     layer.addTo(map);
     layerRef.current = layer;
     

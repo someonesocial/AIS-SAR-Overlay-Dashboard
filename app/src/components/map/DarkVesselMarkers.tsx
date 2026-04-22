@@ -3,8 +3,13 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { SARDetection } from '@/types';
 
+type DarkVessel = SARDetection & {
+  estimatedLength?: number;
+  estimatedType?: string;
+};
+
 interface DarkVesselMarkersProps {
-  vessels: SARDetection[];
+  vessels: DarkVessel[];
   opacity?: number;
 }
 
@@ -91,11 +96,11 @@ export function DarkVesselMarkers({ vessels, opacity = 0.9 }: DarkVesselMarkersP
               <p>Confidence: <span class="text-red-400">${(vessel.confidence * 100).toFixed(0)}%</span></p>
               <p>Satellite: ${vessel.satellite}</p>
               <p>Detected: ${new Date(vessel.timestamp).toLocaleString()}</p>
-              ${(vessel as any).estimatedLength ? `<p>Est. Length: ${(vessel as any).estimatedLength.toFixed(0)}m</p>` : ''}
-              ${(vessel as any).estimatedType ? `<p>Est. Type: ${(vessel as any).estimatedType}</p>` : ''}
-            </div>
-          </div>
-        `, {
+          ${vessel.estimatedLength ? `<p>Est. Length: ${vessel.estimatedLength.toFixed(0)}m</p>` : ''}
+          ${vessel.estimatedType ? `<p>Est. Type: ${vessel.estimatedType}</p>` : ''}
+        </div>
+      </div>
+    `, {
           direction: 'top',
           offset: [0, -10],
           className: 'bg-gray-900 text-white border border-red-500/50 rounded px-2 py-1'

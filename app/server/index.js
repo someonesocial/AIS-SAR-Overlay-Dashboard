@@ -549,6 +549,18 @@ server.listen(PORT, () => {
   connectToAISStream();
 });
 
+server.on("error", (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    console.error(`❌ Port ${PORT} is already in use.`);
+    console.error("   Another backend instance is already running, or the port is occupied by a different app.");
+    console.error("   Stop the existing process, or set a different PORT in app/.env before starting again.");
+    process.exit(1);
+  }
+
+  console.error("❌ Server error:", err.message);
+  process.exit(1);
+});
+
 // Graceful shutdown
 process.on("SIGINT", () => {
   console.log("\n🛑 Shutting down...");

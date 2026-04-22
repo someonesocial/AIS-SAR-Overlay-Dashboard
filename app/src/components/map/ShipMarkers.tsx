@@ -140,7 +140,7 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
           <div class="text-xs min-w-[180px]">
             <p class="font-semibold text-white">${ship.name}</p>
             <p class="text-gray-400 font-mono">${ship.mmsi}</p>
-            <div class="mt-2 space-y-0.5">
+            <div class="mt-1 space-y-0 leading-tight">
               <p>Type: <span class="text-cyan-300 font-medium">${shipTypeConfig[ship.type]?.label || ship.type}</span></p>
               <p>${ship.speed.toFixed(1)} kn | ${ship.course.toFixed(0)}°</p>
             </div>
@@ -148,8 +148,11 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
         `, {
           offset: [0, -10],
           closeButton: false,
-          autoPan: false,
-          className: 'ship-popup bg-gray-900 text-white border border-gray-700 rounded px-2 py-1'
+          autoPan: true,
+          autoPanPadding: [24, 24],
+          closeOnClick: false,
+          maxWidth: 190,
+          className: 'ship-popup'
         });
         
         marker.addTo(map);
@@ -191,6 +194,16 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
     markerStateRef.current = newMarkerState;
     previousSelectedRef.current = selectedMMSI;
   }, [ships, selectedMMSI, onSelectShip, map, opacity]);
+
+  useEffect(() => {
+    markersRef.current.forEach((marker, mmsi) => {
+      if (mmsi === selectedMMSI) {
+        marker.openPopup();
+      } else {
+        marker.closePopup();
+      }
+    });
+  }, [selectedMMSI]);
   
   // Cleanup on unmount
   useEffect(() => {

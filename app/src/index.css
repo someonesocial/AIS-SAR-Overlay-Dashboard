@@ -159,6 +159,52 @@ a {
   padding: 0.4rem 0.55rem;
 }
 
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--tooltip-bg);
+  color: hsl(var(--foreground));
+  box-shadow: none;
+}
+
+.leaflet-popup-content-wrapper {
+  border: 1px solid var(--tooltip-border);
+  border-radius: 0.75rem;
+  padding: 0;
+}
+
+.leaflet-popup-tip {
+  border: 1px solid var(--tooltip-border);
+}
+
+.leaflet-popup-content {
+  margin: 0.3rem 0.45rem;
+  line-height: 1.1;
+}
+
+.ship-popup .leaflet-popup-content-wrapper,
+.sar-popup .leaflet-popup-content-wrapper {
+  backdrop-filter: blur(10px);
+}
+
+.ship-popup .leaflet-popup-content,
+.sar-popup .leaflet-popup-content {
+  min-width: 0;
+  font-size: 10px;
+}
+
+.ship-popup .leaflet-popup-tip,
+.sar-popup .leaflet-popup-tip {
+  background: var(--tooltip-bg);
+}
+
+.ship-popup .leaflet-popup-content-wrapper {
+  width: 190px;
+}
+
+.sar-popup .leaflet-popup-content-wrapper {
+  width: 240px;
+}
+
 .sar-scene-label-pill {
   padding: 4px 8px;
   border: 1px solid rgba(245, 158, 11, 0.5);
