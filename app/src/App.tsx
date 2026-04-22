@@ -32,8 +32,6 @@ function App() {
     connectionStatus, 
     statusMessage 
   } = useRealTimeAIS();
-
-  const [mapZoom, setMapZoom] = useState<number>(6);
   
   // SAR detections with AI
   const { 
@@ -42,7 +40,7 @@ function App() {
     darkVessels, 
     comparison, 
     refresh: refreshSAR 
-  } = useSARDetections(ships, mapZoom);
+  } = useSARDetections(ships);
   
   // Map layers
   const {
@@ -181,10 +179,8 @@ function App() {
               selectedShipMMSI={selectedShipMMSI}
               onSelectShip={selectShip}
               center={[55.0, 15.0]}
-              zoom={6}
+              zoom={8}
               theme={theme}
-              onZoomChange={setMapZoom}
-              currentZoom={mapZoom}
             />
           </div>
           

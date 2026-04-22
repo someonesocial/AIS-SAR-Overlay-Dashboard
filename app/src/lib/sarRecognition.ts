@@ -13,6 +13,7 @@ type BlobCandidate = {
   area: number;
   brightness: number;
   peak: number;
+  peakShipScore: number;
   minX: number;
   maxX: number;
   minY: number;
@@ -29,15 +30,15 @@ type ShipPosition = {
 };
 
 const MAX_IMAGE_EDGE = 640;
-const MIN_BLOB_AREA = 4;
-const MAX_BLOB_AREA = 380;
-const MIN_ISOLATION_RATIO = 2.2;
-const MAX_RING_BRIGHTNESS = 130;
-const MAX_RING_VARIANCE = 650;
-const MIN_EDGE_BUFFER_RATIO = 0.08;
+const MIN_BLOB_AREA = 1;
+const MAX_BLOB_AREA = 32;
+const MIN_ISOLATION_RATIO = 1.25;
+const MAX_RING_BRIGHTNESS = 165;
+const MAX_RING_VARIANCE = 1800;
+const MIN_EDGE_BUFFER_RATIO = 0.04;
 const MATCH_DISTANCE_KM = 4;
 const MATCH_TIME_WINDOW_MINUTES = 45;
-export const MIN_SAR_DETECTION_ZOOM = 14;
+export const MIN_SAR_DETECTION_ZOOM = 13;
 
 export function parseFootprintCoordinates(
   footprint?: string | null,
@@ -129,6 +130,41 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 function brightnessAt(r: number, g: number, b: number): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+function shipLikeScore(r: number, g: number, b: number): number {
+  const brightness = brightnessAt(r, g, b);
+  const warmContrast = Math.max(0, r - b * 0.7) + Math.max(0, r - g * 0.35);
+  const bluePenalty = Math.max(0, b - r * 0.6);
+  const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+  return warmContrast * 1.2 + brightness * 0.35 + saturation * 0.4 - bluePenalty * 0.9;
+}
+
+function localContrastScore(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+): number {
+  let sum = 0;
+  let count = 0;
+
+  for (let yy = y - 1; yy <= y + 1; yy += 1) {
+    for (let xx = x - 1; xx <= x + 1; xx += 1) {
+      if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
+      if (xx === x && yy === y) continue;
+      const base = (yy * width + xx) * 4;
+      sum += brightnessAt(data[base], data[base + 1], data[base + 2]);
+      count += 1;
+    }
+  }
+
+  if (count === 0) return 0;
+
+  const base = (y * width + x) * 4;
+  const center = brightnessAt(data[base], data[base + 1], data[base + 2]);
+  return center - sum / count;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -285,7 +321,19 @@ function findBrightBlobs(
   const blobs: BlobCandidate[] = [];
   const queue: number[] = [];
 
-  const isBright = (index: number) => data[index * 4] >= threshold;
+  const pixelTargetScore = (index: number) => {
+    const x = index % width;
+    const y = Math.floor(index / width);
+    const base = index * 4;
+    const r = data[base];
+    const g = data[base + 1];
+    const b = data[base + 2];
+    const colorScore = shipLikeScore(r, g, b);
+    const contrastScore = localContrastScore(data, width, height, x, y);
+    return colorScore + contrastScore * 6;
+  };
+
+  const isBright = (index: number) => pixelTargetScore(index) >= threshold;
 
   for (let start = 0; start < width * height; start += 1) {
     if (visited[start] || !isBright(start)) continue;
@@ -299,6 +347,7 @@ function findBrightBlobs(
     let sumY = 0;
     let sumBrightness = 0;
     let peak = 0;
+    let peakShipScore = 0;
     let minX = width;
     let maxX = 0;
     let minY = height;
@@ -309,13 +358,18 @@ function findBrightBlobs(
       const x = index % width;
       const y = Math.floor(index / width);
       const base = index * 4;
-      const brightness = brightnessAt(data[base], data[base + 1], data[base + 2]);
+      const r = data[base];
+      const g = data[base + 1];
+      const b = data[base + 2];
+      const brightness = brightnessAt(r, g, b);
+      const score = shipLikeScore(r, g, b) + localContrastScore(data, width, height, x, y) * 6;
 
       area += 1;
       sumX += x;
       sumY += y;
       sumBrightness += brightness;
       peak = Math.max(peak, brightness);
+      peakShipScore = Math.max(peakShipScore, score);
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minY = Math.min(minY, y);
@@ -357,6 +411,7 @@ function findBrightBlobs(
       area,
       brightness: sumBrightness / area,
       peak,
+      peakShipScore,
       minX,
       maxX,
       minY,
@@ -426,6 +481,10 @@ function isNearSceneEdge(
   );
 }
 
+function isShipLikeBlob(blob: BlobCandidate): boolean {
+  return blob.peakShipScore >= 120;
+}
+
 export async function analyzeSarScene(
   scene: SARScene,
   ships: AISShip[],
@@ -482,7 +541,7 @@ export async function analyzeSarScene(
     brightnessSamples.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
     Math.max(1, brightnessSamples.length);
   const stdDev = Math.sqrt(variance);
-  const threshold = Math.max(percentileThreshold, mean + stdDev * 0.7, 132);
+  const threshold = Math.max(percentileThreshold, mean + stdDev * 0.25, 72);
 
   const blobs = findBrightBlobs(imageData, threshold)
     .sort((a, b) => b.peak - a.peak)
@@ -499,6 +558,7 @@ export async function analyzeSarScene(
   const candidates = blobs.filter((blob) => {
     const isolation = analyzeLocalSeaIsolation(imageData, blob);
     return (
+      isShipLikeBlob(blob) &&
       !isNearSceneEdge(blob, dimensions.width, dimensions.height) &&
       isolation.isolationRatio >= MIN_ISOLATION_RATIO &&
       isolation.ringBrightness <= MAX_RING_BRIGHTNESS &&
@@ -512,10 +572,11 @@ export async function analyzeSarScene(
       : blobs.filter((blob) => {
           const isolation = analyzeLocalSeaIsolation(imageData, blob);
           return (
+            isShipLikeBlob(blob) &&
             !isNearSceneEdge(blob, dimensions.width, dimensions.height) &&
-            isolation.isolationRatio >= 1.45 &&
-            isolation.ringBrightness <= 170 &&
-            isolation.ringVariance <= 1600
+            isolation.isolationRatio >= 1.15 &&
+            isolation.ringBrightness <= 180 &&
+            isolation.ringVariance <= 2000
           );
         });
 
