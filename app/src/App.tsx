@@ -7,7 +7,7 @@ import { useRealTimeAIS } from '@/hooks/useRealTimeAIS';
 import { useSARDetections } from '@/hooks/useSARDetections';
 import { useMapLayers } from '@/hooks/useMapLayers';
 import { Toaster } from '@/components/ui/sonner';
-import type { FilterState } from '@/types';
+import type { FilterState, ShipType } from '@/types';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -108,7 +108,7 @@ function App() {
       activeShips: activeShips.length,
       averageSpeed: activeShips.length > 0 ? totalSpeed / activeShips.length : 0,
       alerts: filteredShips.filter(s => s.speed > 25).length,
-      byType: byType as any,
+      byType: byType as Record<ShipType, number>,
       darkVessels: darkVessels.length
     };
   }, [filteredShips, darkVessels]);
@@ -144,7 +144,6 @@ function App() {
         connectionStatus={connectionStatus}
         statusMessage={statusMessage}
         onRefresh={refreshData}
-        darkVesselCount={darkVessels.length}
         theme={theme}
         onToggleTheme={toggleTheme}
       />

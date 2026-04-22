@@ -62,11 +62,13 @@ function StatusPanel({
 // Keep the map on the default location until real data arrives.
 function DefaultView({ center, zoom }: { center?: [number, number]; zoom?: number }) {
   const map = useMap();
+  const centerLat = center?.[0];
+  const centerLon = center?.[1];
   useEffect(() => {
-    if (center && zoom) {
-      map.setView(center, zoom);
+    if (centerLat !== undefined && centerLon !== undefined && zoom !== undefined) {
+      map.setView([centerLat, centerLon], zoom);
     }
-  }, [map, center?.[0], center?.[1], zoom]); // explicitly depend on primitives!
+  }, [map, centerLat, centerLon, zoom]);
   return null;
 }
 

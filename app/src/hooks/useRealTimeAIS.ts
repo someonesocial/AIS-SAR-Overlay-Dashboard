@@ -13,6 +13,60 @@ type StaticShipInfo = {
   type?: ShipType;
   shipTypeCode?: number | null;
 };
+type RawShip = {
+  mmsi?: string | number;
+  shipTypeCode?: number | null;
+  type?: unknown;
+  status?: unknown;
+  latitude?: number;
+  longitude?: number;
+  course?: number;
+  speed?: number;
+  heading?: number;
+  timestamp?: string | number;
+  lastUpdate?: string | number;
+  name?: string;
+};
+
+type AisMessagePayload = {
+  MetaData?: {
+    MMSI?: string | number;
+    ShipType?: unknown;
+    ShipName?: string;
+    time_utc?: string | number;
+  };
+  Message?: {
+    PositionReport?: {
+      UserID?: string | number;
+      Latitude: number;
+      Longitude: number;
+      Cog?: number | string;
+      TrueHeading?: number | string;
+      Sog?: number | string;
+      NavigationalStatus?: unknown;
+    };
+    ShipStaticData?: {
+      Name?: string;
+      Type?: unknown;
+      UserID?: string | number;
+    };
+    StaticDataReport?: {
+      ReportA?: {
+        Name?: string;
+      };
+      ReportB?: {
+        ShipType?: unknown;
+        UserID?: string | number;
+      };
+      UserID?: string | number;
+    };
+  };
+  MessageType?: string;
+  type?: string;
+  status?: string;
+  message?: string;
+  UserID?: string | number;
+};
 
 function resolveApiBase() {
   return import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
@@ -42,8 +96,7 @@ function normalizeStatus(value: unknown): NavigationStatus {
   return "restricted";
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractStaticInfo(payload: any): StaticShipInfo | null {
+function extractStaticInfo(payload: AisMessagePayload): StaticShipInfo | null {
   const shipStatic = payload.Message?.ShipStaticData;
   if (shipStatic) {
     return {
@@ -68,7 +121,7 @@ function extractStaticInfo(payload: any): StaticShipInfo | null {
   return null;
 }
 
-function extractStaticMmsi(payload: any): string {
+function extractStaticMmsi(payload: AisMessagePayload): string {
   return String(
     payload.MetaData?.MMSI ||
       payload.Message?.ShipStaticData?.UserID ||
@@ -78,10 +131,9 @@ function extractStaticMmsi(payload: any): string {
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function upsertShip(
   previous: ShipStore,
-  payload: any,
+  payload: AisMessagePayload,
   staticInfo?: StaticShipInfo | null,
 ): ShipStore {
   const report = payload.Message?.PositionReport;
@@ -159,8 +211,7 @@ export function useRealTimeAIS() {
     "Connecting to AIS backend...",
   );
   const staticInfoRef = useRef<Record<string, StaticShipInfo>>({});
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const payloadBuffer = useRef<any[]>([]);
+  const payloadBuffer = useRef<AisMessagePayload[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,28 +220,36 @@ export function useRealTimeAIS() {
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return;
-        const initial = (data.ships || []).reduce(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (acc: ShipStore, ship: any) => {
-            acc[ship.mmsi] = {
-              ...ship,
-              type: normalizeShipType(ship.shipTypeCode ?? ship.type),
-              shipTypeCode: ship.shipTypeCode ?? null,
-              status: normalizeStatus(ship.status),
-              timestamp: new Date(ship.timestamp || Date.now()),
-              lastUpdate: new Date(ship.lastUpdate || Date.now()),
-              track: [
-                {
-                  latitude: ship.latitude,
-                  longitude: ship.longitude,
-                  timestamp: new Date(),
-                },
-              ],
-            };
+        const initialShips = ((data as { ships?: RawShip[] }).ships || []) as RawShip[];
+        const initial = initialShips.reduce((acc: ShipStore, ship: RawShip) => {
+          const mmsi = String(ship.mmsi || "");
+          if (!mmsi || ship.latitude === undefined || ship.longitude === undefined) {
             return acc;
-          },
-          {},
-        );
+          }
+
+          acc[mmsi] = {
+            mmsi,
+            name: ship.name || `Vessel ${mmsi.slice(-4)}`,
+            type: normalizeShipType(ship.shipTypeCode ?? ship.type),
+            shipTypeCode: ship.shipTypeCode ?? null,
+            latitude: ship.latitude,
+            longitude: ship.longitude,
+            course: Number(ship.course || 0),
+            speed: Number(ship.speed || 0),
+            heading: Number(ship.heading || 0),
+            status: normalizeStatus(ship.status),
+            timestamp: new Date(ship.timestamp || Date.now()),
+            lastUpdate: new Date(ship.lastUpdate || Date.now()),
+            track: [
+              {
+                latitude: ship.latitude,
+                longitude: ship.longitude,
+                timestamp: new Date(),
+              },
+            ],
+          };
+          return acc;
+        }, {});
         setShipsByMmsi(initial);
       })
       .catch(() => undefined);
@@ -227,7 +286,7 @@ export function useRealTimeAIS() {
 
     ws.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data);
+        const payload = JSON.parse(event.data) as AisMessagePayload;
 
         if (payload.type === "connection") {
           const connected = payload.status === "connected";

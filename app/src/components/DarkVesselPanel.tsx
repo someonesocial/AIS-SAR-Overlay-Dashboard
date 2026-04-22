@@ -5,8 +5,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { SARDetection } from '@/types';
 
+type DarkVessel = SARDetection & {
+  estimatedLength?: number;
+  estimatedType?: string;
+};
+
 interface DarkVesselPanelProps {
-  darkVessels: SARDetection[];
+  darkVessels: DarkVessel[];
   stats: {
     totalAIS: number;
     totalSAR: number;
@@ -142,17 +147,17 @@ export function DarkVesselPanel({
                       <span>{new Date(vessel.timestamp).toLocaleString()}</span>
                     </div>
                     
-                    {(vessel as any).estimatedLength && (
+                    {vessel.estimatedLength && (
                       <div className="flex items-center gap-2 text-gray-400">
                         <Crosshair className="w-3 h-3" />
-                        <span>Est. length: {(vessel as any).estimatedLength?.toFixed(0)}m</span>
+                        <span>Est. length: {vessel.estimatedLength.toFixed(0)}m</span>
                       </div>
                     )}
                     
-                    {(vessel as any).estimatedType && (
+                    {vessel.estimatedType && (
                       <div className="flex items-center gap-2 text-gray-400">
                         <Ship className="w-3 h-3" />
-                        <span className="capitalize">Est. type: {(vessel as any).estimatedType}</span>
+                        <span className="capitalize">Est. type: {vessel.estimatedType}</span>
                       </div>
                     )}
                   </div>

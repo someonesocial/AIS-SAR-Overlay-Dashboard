@@ -8,7 +8,6 @@ interface HeaderProps {
   connectionStatus: ConnectionStatus;
   statusMessage?: string;
   onRefresh: () => void;
-  darkVesselCount?: number;
   theme: 'light' | 'dark';
   onToggleTheme: () => void;
 }
@@ -17,7 +16,6 @@ export function Header({
   connectionStatus, 
   statusMessage,
   onRefresh,
-  darkVesselCount = 0,
   theme,
   onToggleTheme
 }: HeaderProps) {

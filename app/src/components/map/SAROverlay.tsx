@@ -129,15 +129,20 @@ export function SAROverlay({
         dashArray: undefined
       });
 
-      polygon.bindTooltip(`
-        <div class="text-xs">
-          <p class="font-semibold text-amber-400">${scene.sceneName}</p>        
+      polygon.bindPopup(`
+        <div class="text-xs leading-tight">
+          <p class="font-semibold text-amber-400">${scene.sceneName}</p>
           <p class="text-gray-400">${scene.acquisitionDate ? new Date(scene.acquisitionDate).toLocaleString() : 'Unknown acquisition time'}</p>
           <p>${scene.processingLevel || 'SAR scene'} ${scene.polarization ? `| ${scene.polarization}` : ''}</p>
         </div>
       `, {
-        direction: 'top',
-        className: 'sar-tooltip'
+        offset: [0, -8],
+        autoPan: true,
+        autoPanPadding: [32, 32],
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: 260,
+        className: 'sar-popup'
       });
 
       polygon.addTo(map);
@@ -201,17 +206,21 @@ export function SAROverlay({
           icon: createDetectionMarker(detection.confidence, detectionOpacity)
         });
         
-        marker.bindTooltip(`
-          <div class="text-xs">
+        marker.bindPopup(`
+          <div class="text-xs leading-tight">
             <p class="font-semibold text-amber-400">SAR Detection</p>
             <p class="text-gray-400">Satellite: ${detection.satellite}</p>
             <p>Confidence: ${(detection.confidence * 100).toFixed(0)}%</p>
             <p class="text-gray-500">${detection.timestamp.toLocaleString()}</p>
           </div>
         `, {
-          direction: 'top',
           offset: [0, -10],
-          className: 'sar-tooltip'
+          autoPan: true,
+          autoPanPadding: [32, 32],
+          closeButton: false,
+          closeOnClick: false,
+          maxWidth: 240,
+          className: 'sar-popup'
         });
         
         marker.addTo(map);
