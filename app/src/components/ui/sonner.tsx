@@ -1,7 +1,11 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
-function Toaster(props: ToasterProps) {
-  return <Sonner theme="dark" richColors {...props} />
+interface AppToasterProps extends ToasterProps {
+  theme?: "light" | "dark"
+}
+
+function Toaster({ theme = "dark", ...props }: AppToasterProps) {
+  return <Sonner theme={theme} richColors {...props} />
 }
 
 export { Toaster }

@@ -43,25 +43,6 @@ function createDetectionMarker(confidence: number, opacity: number): L.DivIcon {
   });
 }
 
-// Create scan line effect
-function createScanLine(bounds: L.LatLngBounds): L.Polyline {
-  const northEast = bounds.getNorthEast();
-  const southWest = bounds.getSouthWest();
-  
-  // Create horizontal scan line
-  const latlngs: L.LatLngExpression[] = [
-    [northEast.lat, southWest.lng],
-    [northEast.lat, northEast.lng]
-  ];
-  
-  return L.polyline(latlngs, {
-    color: '#f59e0b',
-    weight: 2,
-    opacity: 0.3,
-    dashArray: '10, 5'
-  });
-}
-
 function parseFootprint(footprint) {
   if (!footprint) return [];
   const matches = footprint.match(/-?\d+\.?\d*/g);
@@ -74,6 +55,41 @@ function parseFootprint(footprint) {
     coords.push([lat, lon]);
   }
   return coords;
+}
+
+function buildClipPathFromFootprint(
+  coords: [number, number][],
+  bounds: L.LatLngBounds,
+): string | null {
+  if (!coords.length) return null;
+
+  const minLat = bounds.getSouth();
+  const maxLat = bounds.getNorth();
+  const minLon = bounds.getWest();
+  const maxLon = bounds.getEast();
+
+  const latRange = maxLat - minLat;
+  const lonRange = maxLon - minLon;
+  if (latRange <= 0 || lonRange <= 0) return null;
+
+  const uniqueCoords = [...coords];
+  if (uniqueCoords.length > 1) {
+    const first = uniqueCoords[0];
+    const last = uniqueCoords[uniqueCoords.length - 1];
+    if (first[0] === last[0] && first[1] === last[1]) {
+      uniqueCoords.pop();
+    }
+  }
+
+  const points = uniqueCoords
+    .map(([lat, lon]) => {
+      const x = ((lon - minLon) / lonRange) * 100;
+      const y = ((maxLat - lat) / latRange) * 100;
+      return `${x.toFixed(3)}% ${y.toFixed(3)}%`;
+    })
+    .join(', ');
+
+  return points ? `polygon(${points})` : null;
 }
 
 export function SAROverlay({ 
@@ -92,16 +108,25 @@ export function SAROverlay({
     overlaysRef.current.forEach((layer) => layer.remove());
     overlaysRef.current = [];
 
-    scenes.forEach((scene) => {
+    const sortedScenes = [...scenes]
+      .sort((a, b) => {
+        const aTime = a.acquisitionDate ? new Date(a.acquisitionDate).getTime() : 0;
+        const bTime = b.acquisitionDate ? new Date(b.acquisitionDate).getTime() : 0;
+        return bTime - aTime;
+      })
+      .slice(0, 14);
+
+    sortedScenes.forEach((scene, index) => {
       const coords = parseFootprint(scene.footprint);
       if (coords.length < 3) return;
 
       const polygon = L.polygon(coords, {
         color: '#f59e0b',
-        weight: 3,
+        weight: 0,
         fillColor: '#f59e0b',
-        fillOpacity: 0.05 * opacity, // reduced as we add image
-        dashArray: '10, 6'
+        fillOpacity: 0,
+        opacity: 0,
+        dashArray: undefined
       });
 
       polygon.bindTooltip(`
@@ -112,35 +137,39 @@ export function SAROverlay({
         </div>
       `, {
         direction: 'top',
-        className: 'bg-gray-900 text-white border border-amber-500/50 rounded px-2 py-1'
+        className: 'sar-tooltip'
       });
 
       polygon.addTo(map);
       overlaysRef.current.push(polygon);
 
       if (scene.browseUrl) {
-        // Radar Satellite Image Overlay
-        const bounds = polygon.getBounds();
-        const imageOverlay = L.imageOverlay(scene.browseUrl, bounds, {
-          opacity: opacity * 0.45,
-          interactive: false
+        const overlayBounds = polygon.getBounds();
+        const imageOverlay = L.imageOverlay(scene.browseUrl, overlayBounds, {
+          opacity: Math.min(Math.max(opacity, 0), 1),
+          interactive: false,
+          className: 'leaflet-sar-image'
         });
+
+        const clipPath = buildClipPathFromFootprint(
+          coords as [number, number][],
+          overlayBounds,
+        );
+
+        if (clipPath) {
+          imageOverlay.once('load', () => {
+            const element = imageOverlay.getElement();
+            if (!element) return;
+            element.style.clipPath = clipPath;
+            element.style.setProperty('-webkit-clip-path', clipPath);
+          });
+        }
+
         imageOverlay.addTo(map);
+        imageOverlay.setZIndex(400 + (sortedScenes.length - index));
         overlaysRef.current.push(imageOverlay);
       }
 
-      if (scene.centerLat && scene.centerLon) {
-        const centerLabel = L.marker([scene.centerLat, scene.centerLon], {
-          icon: L.divIcon({
-            className: 'sar-scene-label',
-            html: `<div style="padding:4px 8px;border:1px solid rgba(245,158,11,.5);background:rgba(17,24,39,.92);color:#fbbf24;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap">SAR Scene Imagery</div>`,
-            iconSize: [0, 0]
-          })
-        });
-
-        centerLabel.addTo(map);
-        overlaysRef.current.push(centerLabel);
-      }
     });
 
     return () => {
@@ -182,7 +211,7 @@ export function SAROverlay({
         `, {
           direction: 'top',
           offset: [0, -10],
-          className: 'bg-gray-900 text-white border border-amber-500/50 rounded px-2 py-1'
+          className: 'sar-tooltip'
         });
         
         marker.addTo(map);

@@ -18,6 +18,7 @@ interface MapViewProps {
   onSelectShip: (mmsi: string | null) => void;
   center?: [number, number];
   zoom?: number;
+  theme: 'light' | 'dark';
 }
 
 function StatusPanel({
@@ -38,19 +39,19 @@ function StatusPanel({
 
   return (
     <div className="absolute top-4 left-4 z-[1000] max-w-md pointer-events-none">
-      <div className="glass-panel rounded-xl px-4 py-3 text-sm bg-gray-900/80 backdrop-blur border border-gray-700/50 shadow-lg">
-        <p className="font-semibold text-white">Operational Status</p>
+      <div className="glass-panel map-overlay-panel rounded-xl px-4 py-3 text-sm shadow-lg">
+        <p className="font-semibold app-text">Operational Status</p>
         {aisEnabled && ships.length === 0 && (
-          <p className="mt-2 text-gray-300">
+          <p className="mt-2 app-muted">
             The AIS websocket is connected, but no live ship position messages are arriving for the current key or subscription.
           </p>
         )}
         {sarEnabled && sarScenes.length === 0 && (
-          <p className="mt-2 text-gray-300">
+          <p className="mt-2 app-muted">
             No SAR scenes were returned for the selected area and time window.
           </p>
         )}
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs app-muted">
           Current counts: {ships.length} AIS ships, {sarScenes.length} SAR scenes, {darkVessels.length} dark-vessel candidates.
         </p>
       </div>
@@ -120,7 +121,8 @@ export function MapView({
   selectedShipMMSI,
   onSelectShip,
   center = [55.0, 15.0],
-  zoom = 6
+  zoom = 6,
+  theme
 }: MapViewProps) {
   const aisLayer = layers.find((l) => l.id === 'ais');
   const aisEnabled = aisLayer?.enabled ?? true;
@@ -141,9 +143,13 @@ export function MapView({
   const gridEnabled = gridLayer?.enabled ?? true;
   
   const darkVesselOpacity = layers.find(l => l.id === 'detection')?.opacity ?? 1;
+  const mapTileUrl =
+    theme === 'dark'
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
 
   return (
-    <div className="relative flex-1 overflow-hidden h-full w-full bg-[#050b16]">
+    <div className="relative flex-1 overflow-hidden h-full w-full app-map-surface">
       <MapContainer
         zoom={zoom}
         center={center}
@@ -156,7 +162,7 @@ export function MapView({
         <ZoomControl position="bottomright" />
         
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url={mapTileUrl}
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
 
@@ -198,7 +204,7 @@ export function MapView({
       />
 
       <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
-        <div className="glass-panel rounded px-3 py-1.5 text-xs text-gray-400 bg-gray-900/80 backdrop-blur border border-gray-700/50 shadow-lg">
+        <div className="glass-panel map-overlay-panel rounded px-3 py-1.5 text-xs app-muted shadow-lg">
           <span className="font-mono text-cyan-400">{ships.length}</span>
           <span className="ml-1 text-gray-500">AIS</span>
           <span className="mx-2 text-gray-600">|</span>
@@ -211,9 +217,9 @@ export function MapView({
       </div>
 
       <div className="absolute top-4 right-4 z-[1000] pointer-events-none">
-        <div className="glass-panel rounded-lg p-3 space-y-2 bg-gray-900/80 backdrop-blur border border-gray-700/50 shadow-lg">
-          <p className="text-[10px] font-semibold uppercase text-gray-500">Legend</p>
-          <div className="space-y-1.5 text-[10px] text-gray-400">
+        <div className="glass-panel map-overlay-panel rounded-lg p-3 space-y-2 shadow-lg">
+          <p className="text-[10px] font-semibold uppercase app-muted">Legend</p>
+          <div className="space-y-1.5 text-[10px] app-muted">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-cyan-400" />
               <span>AIS Vessel</span>

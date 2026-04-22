@@ -57,7 +57,7 @@ export function Sidebar({
   
   if (collapsed) {
     return (
-      <div className="w-14 bg-[#111827] border-r border-gray-800 flex flex-col items-center py-4 gap-2 z-40">
+      <div className="w-14 app-panel border-r app-panel-border flex flex-col items-center py-4 gap-2 z-40">
         <Button
           variant="ghost"
           size="icon"
@@ -93,7 +93,7 @@ export function Sidebar({
   }
   
   return (
-    <div className="w-72 bg-[#111827] border-r border-gray-800 flex flex-col z-40">
+    <div className="w-72 app-panel border-r app-panel-border flex flex-col z-40">
       {/* Header */}
       <div className="h-10 border-b border-gray-800 flex items-center justify-between px-3">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
