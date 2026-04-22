@@ -61,7 +61,7 @@ export function BottomPanel({
   
   if (collapsed) {
     return (
-      <div className="h-8 bg-[#111827] border-t border-gray-800 flex items-center justify-between px-4 z-30">
+      <div className="h-8 app-panel border-t app-panel-border flex items-center justify-between px-4 z-30">
         <div className="flex items-center gap-4 text-xs text-gray-500">
           <span className="text-cyan-400">{ships.length} AIS</span>
           <span>|</span>
@@ -107,7 +107,7 @@ export function BottomPanel({
   ];
   
   return (
-    <div className="h-64 bg-[#111827] border-t border-gray-800 flex flex-col z-30">
+    <div className="h-64 app-panel border-t app-panel-border flex flex-col z-30">
       {/* Header */}
       <div className="h-9 border-b border-gray-800 flex items-center justify-between px-3">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -208,10 +208,10 @@ export function BottomPanel({
                         <td className="py-2 px-3">
                           <Badge 
                             variant="secondary" 
-                            className={`text-[10px] ${
+                            className={`text-[10px] status-pill ${
                               ship.status === 'underway' 
-                                ? 'bg-emerald-500/20 text-emerald-400' 
-                                : 'bg-gray-700 text-gray-400'
+                                ? 'status-pill--underway' 
+                                : 'status-pill--inactive'
                             }`}
                           >
                             {statusLabels[ship.status]}

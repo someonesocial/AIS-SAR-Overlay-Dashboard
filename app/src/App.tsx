@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
 import { MapView } from '@/components/MapView';
@@ -9,7 +9,23 @@ import { useMapLayers } from '@/hooks/useMapLayers';
 import { Toaster } from '@/components/ui/sonner';
 import type { FilterState } from '@/types';
 
+type ThemeMode = 'light' | 'dark';
+
 function App() {
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const storedTheme = localStorage.getItem('app-theme');
+    if (storedTheme === 'light' || storedTheme === 'dark') {
+      return storedTheme;
+    }
+
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('app-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   // Real-time AIS data
   const { 
     ships, 
@@ -116,15 +132,21 @@ function App() {
   const refreshData = useCallback(() => {
     refreshSAR();
   }, [refreshSAR]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  }, []);
   
   return (
-    <div className="h-screen flex flex-col bg-[#0a0f1c] overflow-hidden">
+    <div className={`h-screen flex flex-col overflow-hidden app-shell theme-${theme}`}>
       {/* Header */}
       <Header 
         connectionStatus={connectionStatus}
         statusMessage={statusMessage}
         onRefresh={refreshData}
         darkVesselCount={darkVessels.length}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       
       {/* Main Content */}
@@ -158,6 +180,7 @@ function App() {
               onSelectShip={selectShip}
               center={[55.0, 15.0]}
               zoom={6}
+              theme={theme}
             />
           </div>
           
@@ -177,12 +200,13 @@ function App() {
       
       {/* Toast notifications */}
       <Toaster 
+        theme={theme}
         position="top-right"
         toastOptions={{
           style: {
-            background: '#111827',
-            border: '1px solid #374151',
-            color: '#f9fafb'
+            background: theme === 'dark' ? '#111827' : '#f8fafc',
+            border: theme === 'dark' ? '1px solid #374151' : '1px solid #cbd5e1',
+            color: theme === 'dark' ? '#f9fafb' : '#0f172a'
           }
         }}
       />

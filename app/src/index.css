@@ -20,6 +20,46 @@
   --border: 217 19% 22%;
   --input: 217 19% 22%;
   --ring: 190 95% 43%;
+
+  --app-bg: 223 56% 7%;
+  --app-fg: 210 40% 98%;
+  --panel-bg: 221 39% 11%;
+  --panel-border: 217 19% 22%;
+  --overlay-bg: 222 37% 11% / 0.82;
+  --overlay-border: 217 19% 28% / 0.6;
+  --leaflet-bg: #0a0f1c;
+  --tooltip-bg: rgba(17, 24, 39, 0.96);
+  --tooltip-border: rgba(75, 85, 99, 0.7);
+}
+
+[data-theme='light'] {
+  --background: 210 33% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 199 89% 42%;
+  --primary-foreground: 210 33% 98%;
+  --secondary: 210 30% 93%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 30% 94%;
+  --muted-foreground: 215 16% 40%;
+  --accent: 210 30% 93%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 72% 46%;
+  --destructive-foreground: 210 33% 98%;
+  --border: 214 32% 85%;
+  --input: 214 32% 85%;
+  --ring: 199 89% 42%;
+
+  --app-bg: 210 33% 98%;
+  --app-fg: 222 47% 11%;
+  --panel-bg: 0 0% 100%;
+  --panel-border: 214 32% 85%;
+  --overlay-bg: 0 0% 100% / 0.88;
+  --overlay-border: 214 32% 80% / 0.8;
+  --leaflet-bg: #dbeafe;
+  --tooltip-bg: rgba(248, 250, 252, 0.95);
+  --tooltip-border: rgba(148, 163, 184, 0.9);
 }
 
 * {
@@ -35,11 +75,49 @@ body,
 }
 
 body {
+  background: hsl(var(--app-bg));
+  color: hsl(var(--app-fg));
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.app-shell {
   background:
     radial-gradient(circle at top, rgba(6, 182, 212, 0.12), transparent 30%),
-    linear-gradient(180deg, #020617 0%, #0a0f1c 100%);
-  color: #f8fafc;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    linear-gradient(180deg, hsl(var(--app-bg)) 0%, hsl(var(--app-bg)) 100%);
+  color: hsl(var(--app-fg));
+}
+
+[data-theme='light'] .app-shell {
+  background:
+    radial-gradient(circle at top, rgba(14, 165, 233, 0.16), transparent 34%),
+    linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+}
+
+.app-panel {
+  background: hsl(var(--panel-bg));
+}
+
+.app-panel-border {
+  border-color: hsl(var(--panel-border));
+}
+
+.app-text {
+  color: hsl(var(--foreground));
+}
+
+.app-muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.app-map-surface {
+  background: var(--leaflet-bg);
+}
+
+.map-overlay-panel {
+  background: hsla(var(--overlay-bg));
+  border: 1px solid hsla(var(--overlay-border));
+  backdrop-filter: blur(10px);
 }
 
 button,
@@ -52,23 +130,125 @@ a {
 }
 
 .glass-panel {
-  background: rgba(17, 24, 39, 0.86);
-  border: 1px solid rgba(75, 85, 99, 0.5);
+  background: hsla(var(--overlay-bg));
+  border: 1px solid hsla(var(--overlay-border));
   backdrop-filter: blur(10px);
   box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
 }
 
 .leaflet-container {
-  background: #0a0f1c;
+  background: var(--leaflet-bg);
 }
 
 .leaflet-tooltip {
-  background: rgba(17, 24, 39, 0.96);
-  border: 1px solid rgba(75, 85, 99, 0.7);
-  color: #f8fafc;
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  color: hsl(var(--foreground));
   box-shadow: none;
 }
 
 .leaflet-tooltip-top:before {
-  border-top-color: rgba(75, 85, 99, 0.7);
+  border-top-color: var(--tooltip-border);
+}
+
+.sar-tooltip {
+  background: var(--tooltip-bg);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: hsl(var(--foreground));
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.sar-scene-label-pill {
+  padding: 4px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  background: var(--tooltip-bg);
+  color: #f59e0b;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.leaflet-sar-image {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  mix-blend-mode: screen;
+  filter: contrast(1.08) saturate(1.06) brightness(1.02);
+}
+
+[data-theme='light'] .leaflet-sar-image {
+  filter: brightness(1.12) contrast(1.08) saturate(1.1);
+}
+
+[data-theme='light'] .app-shell .text-white {
+  color: #0f172a !important;
+}
+
+[data-theme='light'] .app-shell .text-gray-300 {
+  color: #334155 !important;
+}
+
+[data-theme='light'] .app-shell .text-gray-400 {
+  color: #475569 !important;
+}
+
+[data-theme='light'] .app-shell .text-gray-500 {
+  color: #64748b !important;
+}
+
+[data-theme='light'] .app-shell .text-gray-600 {
+  color: #475569 !important;
+}
+
+[data-theme='light'] .app-shell .text-gray-700 {
+  color: #334155 !important;
+}
+
+[data-theme='light'] .app-shell .border-gray-800,
+[data-theme='light'] .app-shell .border-gray-800\/50,
+[data-theme='light'] .app-shell .border-gray-700,
+[data-theme='light'] .app-shell .border-gray-700\/50 {
+  border-color: rgba(148, 163, 184, 0.45) !important;
+}
+
+[data-theme='light'] .app-shell .bg-gray-900\/50,
+[data-theme='light'] .app-shell .bg-gray-900\/30 {
+  background-color: rgba(241, 245, 249, 0.92) !important;
+}
+
+[data-theme='light'] .app-shell .bg-gray-800\/50,
+[data-theme='light'] .app-shell .bg-gray-800,
+[data-theme='light'] .app-shell .hover\:bg-gray-800:hover,
+[data-theme='light'] .app-shell .hover\:bg-gray-800\/50:hover {
+  background-color: rgba(226, 232, 240, 0.78) !important;
+}
+
+.status-pill {
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.status-pill--underway {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.status-pill--inactive {
+  background-color: rgba(71, 85, 105, 0.72);
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+[data-theme='light'] .status-pill--underway {
+  background-color: rgba(16, 185, 129, 0.18);
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.3);
+}
+
+[data-theme='light'] .status-pill--inactive {
+  background-color: rgba(148, 163, 184, 0.25);
+  color: #334155;
+  border-color: rgba(100, 116, 139, 0.35);
 }

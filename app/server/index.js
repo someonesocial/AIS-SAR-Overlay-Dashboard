@@ -9,6 +9,7 @@ const WebSocket = require("ws");
 const cors = require("cors");
 const path = require("path");
 const dotenv = require("dotenv");
+const axios = require("axios");
 
 const { getLatestSARWithDetections } = require("./sar-service");
 
@@ -23,6 +24,7 @@ const wss = new WebSocket.Server({ server, path: "/ws" });
 const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 const API_KEY = process.env.AISSTREAM_API_KEY;
+const ASF_BROWSE_HOST = "datapool.asf.alaska.edu";
 // Track ships in the Baltic Sea
 const AIS_BOUNDING_BOXES = [
   [
@@ -34,6 +36,27 @@ const AIS_BOUNDING_BOXES = [
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+function getRequestBaseUrl(req) {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  return `${proto}://${host}`;
+}
+
+function toProxiedBrowseUrl(rawUrl, req) {
+  if (!rawUrl || typeof rawUrl !== "string") return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.hostname !== ASF_BROWSE_HOST) {
+      return rawUrl;
+    }
+
+    return `${getRequestBaseUrl(req)}/api/sar/browse?url=${encodeURIComponent(rawUrl)}`;
+  } catch {
+    return rawUrl;
+  }
+}
 
 // State
 const clients = new Map();
@@ -229,11 +252,71 @@ app.get("/api/sar/detections", async (req, res) => {
     console.log(`   AIS ships available: ${aisShips.length}`);
 
     const result = await getLatestSARWithDetections(bbox, aisShips);
+    const scenesWithProxyUrls = (result.scenes || []).map((scene) => ({
+      ...scene,
+      browseUrl: toProxiedBrowseUrl(scene.browseUrl, req),
+    }));
 
-    res.json(result);
+    res.json({
+      ...result,
+      scenes: scenesWithProxyUrls,
+    });
   } catch (err) {
     console.error("❌ SAR API error:", err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Proxy ASF browse images to avoid browser-side CORS blocks.
+app.get("/api/sar/browse", async (req, res) => {
+  const targetUrl = req.query.url;
+
+  if (!targetUrl || typeof targetUrl !== "string") {
+    return res.status(400).json({ error: "Missing browse image URL" });
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return res.status(400).json({ error: "Invalid browse image URL" });
+  }
+
+  if (parsed.protocol !== "https:" || parsed.hostname !== ASF_BROWSE_HOST) {
+    return res.status(400).json({ error: "Unsupported browse image host" });
+  }
+
+  try {
+    const response = await axios.get(parsed.toString(), {
+      responseType: "stream",
+      timeout: 30000,
+      maxRedirects: 5,
+      headers: {
+        "User-Agent": "Eye-of-God-SAR-Proxy/1.0",
+      },
+      validateStatus: (status) => status >= 200 && status < 400,
+    });
+
+    const contentType = response.headers["content-type"] || "image/jpeg";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=1800");
+    if (response.headers["content-length"]) {
+      res.setHeader("Content-Length", response.headers["content-length"]);
+    }
+
+    response.data.on("error", (streamErr) => {
+      console.error("❌ Browse proxy stream error:", streamErr.message);
+      if (!res.headersSent) {
+        res.status(502).end();
+      } else {
+        res.end();
+      }
+    });
+
+    response.data.pipe(res);
+  } catch (err) {
+    console.error("❌ Browse proxy error:", err.message);
+    res.status(502).json({ error: "Failed to fetch browse image" });
   }
 });
 
