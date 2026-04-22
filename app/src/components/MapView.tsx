@@ -1,4 +1,5 @@
-import { useMemo, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import L from 'leaflet';
 import { MapContainer, TileLayer, ZoomControl, useMap } from 'react-leaflet';
 import type { AISShip, SARDetection, SARScene, MapLayer } from '@/types';
 import { ShipMarkers } from './map/ShipMarkers';
@@ -57,15 +58,45 @@ function StatusPanel({
   );
 }
 
-// Center Map slightly offset if needed or just re-center
-function MapController({ center, zoom }: { center?: [number, number]; zoom?: number }) {
+// Keep the map on the default location until real data arrives.
+function DefaultView({ center, zoom }: { center?: [number, number]; zoom?: number }) {
   const map = useMap();
   useEffect(() => {
     if (center && zoom) {
-      // Avoid resetting if the user is already interacting
       map.setView(center, zoom);
     }
   }, [map, center?.[0], center?.[1], zoom]); // explicitly depend on primitives!
+  return null;
+}
+
+// Fit the map once to all currently visible ships so users can zoom from a shared view.
+function FitShipsToView({ ships }: { ships: AISShip[] }) {
+  const map = useMap();
+  const hasFittedRef = useRef(false);
+
+  useEffect(() => {
+    if (hasFittedRef.current || ships.length === 0) {
+      return;
+    }
+
+    const bounds = L.latLngBounds(
+      ships.map((ship) => [ship.latitude, ship.longitude] as L.LatLngExpression)
+    );
+
+    if (!bounds.isValid()) return;
+
+    if (ships.length === 1) {
+      map.setView(bounds.getCenter(), Math.max(map.getZoom(), 7));
+    } else {
+      map.fitBounds(bounds.pad(0.2), {
+        padding: [40, 40],
+        maxZoom: 8
+      });
+    }
+
+    hasFittedRef.current = true;
+  }, [map, ships]);
+
   return null;
 }
 
@@ -128,7 +159,8 @@ export function MapView({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
 
-        <MapController center={center} zoom={zoom} />
+        <DefaultView center={center} zoom={zoom} />
+        <FitShipsToView ships={ships} />
 
         {gridEnabled && <GridOverlay />}
         
