@@ -19,8 +19,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
-import type { MapLayer, AISShip, FilterState, Statistics, ShipType, NavigationStatus, SARDetection } from '@/types';
-import { shipTypeConfig, statusLabels } from '@/data/constants';
+import type { MapLayer, AISShip, FilterState, Statistics, NavigationStatus, SARDetection } from '@/types';
+import { shipTypeConfig, shipTypeOrder, statusLabels } from '@/data/constants';
 
 interface SidebarProps {
   layers: MapLayer[];
@@ -36,7 +36,6 @@ interface SidebarProps {
   darkVessels?: SARDetection[];
 }
 
-const shipTypes: ShipType[] = ['cargo', 'tanker', 'passenger', 'fishing', 'military', 'other'];
 const navStatuses: NavigationStatus[] = ['underway', 'anchored', 'moored', 'restricted', 'fishing', 'sailing'];
 
 export function Sidebar({
@@ -343,7 +342,7 @@ export function Sidebar({
               <div className="space-y-2">
                 <label className="text-xs text-gray-400">Ship Types</label>
                 <div className="space-y-1">
-                  {shipTypes.map(type => {
+                  {shipTypeOrder.map(type => {
                     const config = shipTypeConfig[type];
                     const isSelected = filters.shipTypes.includes(type);
                     return (
@@ -549,7 +548,7 @@ export function Sidebar({
               <div className="space-y-2">
                 <label className="text-xs text-gray-400">By Type</label>
                 <div className="space-y-1">
-                  {shipTypes.map(type => {
+                  {shipTypeOrder.map(type => {
                     const count = statistics.byType[type] || 0;
                     const config = shipTypeConfig[type];
                     const percentage = statistics.totalShips > 0 

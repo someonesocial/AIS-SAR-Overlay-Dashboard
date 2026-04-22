@@ -64,6 +64,124 @@ let aisSocket = null;
 let shipsCache = new Map();
 let isConnected = false;
 
+function normalizeShipType(value) {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))
+        ? Number(value)
+        : null;
+
+  if (numericValue !== null) {
+    if (numericValue >= 20 && numericValue <= 28) return "wing_in_ground";
+    if (numericValue === 29) return "sar_aircraft";
+    if (numericValue === 30) return "fishing";
+    if (numericValue === 31 || numericValue === 32) return "towing";
+    if (numericValue === 33) return "dredging";
+    if (numericValue === 34) return "diving";
+    if (numericValue === 35) return "military";
+    if (numericValue === 36) return "sailing";
+    if (numericValue === 37) return "pleasure";
+    if (numericValue === 50) return "pilot";
+    if (numericValue === 51) return "sar";
+    if (numericValue === 52) return "tug";
+    if (numericValue === 53) return "port_tender";
+    if (numericValue === 54) return "anti_pollution";
+    if (numericValue === 55) return "law_enforcement";
+    if (numericValue === 58) return "medical";
+    if (numericValue === 59) return "noncombatant";
+    if (numericValue >= 60 && numericValue <= 69) return "passenger";
+    if (numericValue >= 70 && numericValue <= 79) return "cargo";
+    if (numericValue >= 80 && numericValue <= 89) return "tanker";
+    return "other";
+  }
+
+  const input = String(value || "").toLowerCase();
+  if (input.includes("cargo")) return "cargo";
+  if (input.includes("tank")) return "tanker";
+  if (input.includes("pass")) return "passenger";
+  if (input.includes("fish")) return "fishing";
+  if (input.includes("tug")) return "tug";
+  if (input.includes("pilot")) return "pilot";
+  if (input.includes("sar aircraft")) return "sar_aircraft";
+  if (input.includes("sar") || input.includes("search and rescue")) return "sar";
+  if (input.includes("tow")) return "towing";
+  if (input.includes("dredg")) return "dredging";
+  if (input.includes("diving")) return "diving";
+  if (input.includes("mil")) return "military";
+  if (input.includes("sail")) return "sailing";
+  if (input.includes("pleasure")) return "pleasure";
+  if (input.includes("wing")) return "wing_in_ground";
+  if (input.includes("port tender")) return "port_tender";
+  if (input.includes("pollution")) return "anti_pollution";
+  if (input.includes("law enforcement")) return "law_enforcement";
+  if (input.includes("medical")) return "medical";
+  if (input.includes("noncombat")) return "noncombatant";
+  return "other";
+}
+
+function extractStaticShipInfo(message) {
+  const shipStatic = message.Message?.ShipStaticData;
+  if (shipStatic) {
+    return {
+      name: shipStatic.Name,
+      typeValue: shipStatic.Type,
+    };
+  }
+
+  const staticData = message.Message?.StaticDataReport;
+  if (staticData?.ReportB) {
+    return {
+      name: staticData.ReportA?.Name || message.MetaData?.ShipName,
+      typeValue: staticData.ReportB.ShipType,
+    };
+  }
+
+  return null;
+}
+
+function extractStaticMmsi(message) {
+  return (
+    message.MetaData?.MMSI ||
+    message.Message?.ShipStaticData?.UserID ||
+    message.Message?.StaticDataReport?.UserID ||
+    message.UserID ||
+    null
+  );
+}
+
+function extractMmsi(message, report) {
+  return message.MetaData?.MMSI || report?.UserID || message.UserID || null;
+}
+
+function isTrackedShip(ship) {
+  return (
+    ship &&
+    Number.isFinite(ship.latitude) &&
+    Number.isFinite(ship.longitude)
+  );
+}
+
+function getTrackedShips() {
+  return Array.from(shipsCache.values()).filter(isTrackedShip);
+}
+
+function mergeShipRecord(mmsi, updates) {
+  const existing = shipsCache.get(mmsi) || { mmsi };
+  const next = {
+    ...existing,
+    ...updates,
+    mmsi,
+  };
+
+  if (next.type !== undefined) {
+    next.type = normalizeShipType(next.type);
+  }
+
+  shipsCache.set(mmsi, next);
+  return next;
+}
+
 // ==================== AIS WebSocket Proxy ====================
 
 function connectToAISStream() {
@@ -132,17 +250,39 @@ function connectToAISStream() {
 }
 
 function processAISMessage(message) {
+  const staticInfo = extractStaticShipInfo(message);
+  if (staticInfo) {
+    const mmsi = String(extractStaticMmsi(message) || "");
+    if (!mmsi) return;
+
+    mergeShipRecord(mmsi, {
+      name: staticInfo.name,
+      type: normalizeShipType(staticInfo.typeValue),
+      shipTypeCode: staticInfo.typeValue,
+      lastUpdate: new Date(),
+    });
+    return;
+  }
+
   if (
     message.MessageType === "PositionReport" &&
     message.Message?.PositionReport
   ) {
     const report = message.Message.PositionReport;
-    const mmsi = message.MetaData?.MMSI || report.UserID;
+    const mmsi = extractMmsi(message, report);
+    if (!mmsi) return;
 
-    shipsCache.set(mmsi.toString(), {
-      mmsi: mmsi.toString(),
-      name: message.MetaData?.ShipName || "Unknown",
-      type: message.MetaData?.ShipType || "unknown",
+    const mmsiKey = mmsi.toString();
+    const existing = shipsCache.get(mmsiKey) || {};
+    const nextType = normalizeShipType(
+      existing.shipTypeCode ?? existing.type ?? message.MetaData?.ShipType ?? "other",
+    );
+
+    mergeShipRecord(mmsiKey, {
+      name: message.MetaData?.ShipName || existing.name || "Unknown",
+      type: nextType,
+      shipTypeCode:
+        existing.shipTypeCode ?? message.MetaData?.ShipType ?? null,
       latitude: report.Latitude,
       longitude: report.Longitude,
       course: report.Cog || report.TrueHeading || 0,
@@ -228,7 +368,7 @@ app.get("/api/health", (req, res) => {
 
 // Get all tracked ships
 app.get("/api/ships", (req, res) => {
-  const ships = Array.from(shipsCache.values());
+  const ships = getTrackedShips();
   res.json({ ships, count: ships.length });
 });
 
@@ -246,7 +386,7 @@ app.get("/api/sar/detections", async (req, res) => {
       [parseFloat(minLat), parseFloat(minLon)],
       [parseFloat(maxLat), parseFloat(maxLon)],
     ];
-    const aisShips = Array.from(shipsCache.values());
+    const aisShips = getTrackedShips();
 
     console.log("🔍 Fetching SAR detections...");
     console.log(`   AIS ships available: ${aisShips.length}`);
@@ -334,7 +474,7 @@ app.get("/api/dark-vessels", async (req, res) => {
       [parseFloat(minLat), parseFloat(minLon)],
       [parseFloat(maxLat), parseFloat(maxLon)],
     ];
-    const aisShips = Array.from(shipsCache.values());
+    const aisShips = getTrackedShips();
 
     const result = await getLatestSARWithDetections(bbox, aisShips);
 
@@ -352,7 +492,7 @@ app.get("/api/dark-vessels", async (req, res) => {
 // Get comparison report (AIS vs SAR)
 app.get("/api/comparison", async (req, res) => {
   try {
-    const aisShips = Array.from(shipsCache.values());
+    const aisShips = getTrackedShips();
     const bbox = [
       [54.0, 10.0],
       [59.0, 20.0],

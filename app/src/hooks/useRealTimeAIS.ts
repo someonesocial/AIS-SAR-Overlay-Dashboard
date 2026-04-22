@@ -5,8 +5,14 @@ import type {
   NavigationStatus,
   ShipType,
 } from "@/types";
+import { normalizeShipType } from "@/data/shipTypes";
 
 type ShipStore = Record<string, AISShip>;
+type StaticShipInfo = {
+  name?: string;
+  type?: ShipType;
+  shipTypeCode?: number | null;
+};
 
 function resolveApiBase() {
   return import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
@@ -14,16 +20,6 @@ function resolveApiBase() {
 
 function resolveWsUrl() {
   return import.meta.env.VITE_WS_URL || "ws://127.0.0.1:3001/ws";
-}
-
-function normalizeShipType(value: string | undefined): ShipType {
-  const input = (value || "").toLowerCase();
-  if (input.includes("cargo")) return "cargo";
-  if (input.includes("tank")) return "tanker";
-  if (input.includes("pass")) return "passenger";
-  if (input.includes("fish")) return "fishing";
-  if (input.includes("mil")) return "military";
-  return "other";
 }
 
 function normalizeStatus(value: unknown): NavigationStatus {
@@ -47,7 +43,47 @@ function normalizeStatus(value: unknown): NavigationStatus {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function upsertShip(previous: ShipStore, payload: any): ShipStore {
+function extractStaticInfo(payload: any): StaticShipInfo | null {
+  const shipStatic = payload.Message?.ShipStaticData;
+  if (shipStatic) {
+    return {
+      name: shipStatic.Name,
+      type: normalizeShipType(shipStatic.Type),
+      shipTypeCode: typeof shipStatic.Type === "number" ? shipStatic.Type : null,
+    };
+  }
+
+  const staticData = payload.Message?.StaticDataReport;
+  if (staticData?.ReportB) {
+    return {
+      name: staticData.ReportA?.Name || payload.MetaData?.ShipName,
+      type: normalizeShipType(staticData.ReportB.ShipType),
+      shipTypeCode:
+        typeof staticData.ReportB.ShipType === "number"
+          ? staticData.ReportB.ShipType
+          : null,
+    };
+  }
+
+  return null;
+}
+
+function extractStaticMmsi(payload: any): string {
+  return String(
+    payload.MetaData?.MMSI ||
+      payload.Message?.ShipStaticData?.UserID ||
+      payload.Message?.StaticDataReport?.UserID ||
+      payload.UserID ||
+      "",
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function upsertShip(
+  previous: ShipStore,
+  payload: any,
+  staticInfo?: StaticShipInfo | null,
+): ShipStore {
   const report = payload.Message?.PositionReport;
   if (!report) return previous;
 
@@ -56,12 +92,25 @@ function upsertShip(previous: ShipStore, payload: any): ShipStore {
 
   const now = new Date(payload.MetaData?.time_utc || Date.now());
   const existing = previous[mmsi];
+  const mergedType = normalizeShipType(
+    staticInfo?.type ??
+      payload.MetaData?.ShipType ??
+      existing?.shipTypeCode ??
+      existing?.type,
+  );
+  const mergedName =
+    staticInfo?.name ||
+    payload.MetaData?.ShipName ||
+    existing?.name ||
+    `Vessel ${mmsi.slice(-4)}`;
 
-  // Only update if position changed or it's a new ship
+  // Only update if something meaningful changed.
   if (existing) {
     const latChanged = existing.latitude !== report.Latitude;
     const lonChanged = existing.longitude !== report.Longitude;
-    if (!latChanged && !lonChanged) return previous;
+    const typeChanged = existing.type !== mergedType;
+    const nameChanged = existing.name !== mergedName;
+    if (!latChanged && !lonChanged && !typeChanged && !nameChanged) return previous;
   }
 
   const nextTrack = [
@@ -71,11 +120,9 @@ function upsertShip(previous: ShipStore, payload: any): ShipStore {
 
   const updated = {
     mmsi,
-    name:
-      payload.MetaData?.ShipName ||
-      existing?.name ||
-      `Vessel ${mmsi.slice(-4)}`,
-    type: normalizeShipType(payload.MetaData?.ShipType || existing?.type),
+    name: mergedName,
+    type: mergedType,
+    shipTypeCode: staticInfo?.shipTypeCode ?? existing?.shipTypeCode ?? null,
     latitude: report.Latitude,
     longitude: report.Longitude,
     course: Number(report.Cog || report.TrueHeading || 0),
@@ -111,6 +158,7 @@ export function useRealTimeAIS() {
   const [statusMessage, setStatusMessage] = useState<string>(
     "Connecting to AIS backend...",
   );
+  const staticInfoRef = useRef<Record<string, StaticShipInfo>>({});
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const payloadBuffer = useRef<any[]>([]);
 
@@ -126,7 +174,8 @@ export function useRealTimeAIS() {
           (acc: ShipStore, ship: any) => {
             acc[ship.mmsi] = {
               ...ship,
-              type: normalizeShipType(ship.type),
+              type: normalizeShipType(ship.shipTypeCode ?? ship.type),
+              shipTypeCode: ship.shipTypeCode ?? null,
               status: normalizeStatus(ship.status),
               timestamp: new Date(ship.timestamp || Date.now()),
               lastUpdate: new Date(ship.lastUpdate || Date.now()),
@@ -160,7 +209,10 @@ export function useRealTimeAIS() {
         setShipsByMmsi((current) => {
           let next = { ...current };
           for (const payload of payloadBuffer.current) {
-            next = upsertShip(next, payload);
+            const report = payload.Message?.PositionReport;
+            const mmsi = String(payload.MetaData?.MMSI || report?.UserID || "");
+            const staticInfo = mmsi ? staticInfoRef.current[mmsi] : null;
+            next = upsertShip(next, payload, staticInfo);
           }
           return next;
         });
@@ -203,6 +255,39 @@ export function useRealTimeAIS() {
         if (payload.MessageType === "PositionReport") {
           payloadBuffer.current.push(payload);
           setConnectionStatus("online");
+          return;
+        }
+
+        if (payload.MessageType === "ShipStaticData" || payload.MessageType === "StaticDataReport") {
+          const staticInfo = extractStaticInfo(payload);
+          if (!staticInfo) return;
+
+          const mmsi = extractStaticMmsi(payload);
+          if (!mmsi) return;
+
+          staticInfoRef.current[mmsi] = staticInfo;
+
+          setShipsByMmsi((current) => {
+            const existing = current[mmsi];
+            if (!existing) return current;
+
+            const nextType = staticInfo.type || existing.type;
+            const nextName = staticInfo.name || existing.name;
+            if (existing.type === nextType && existing.name === nextName) {
+              return current;
+            }
+
+            return {
+              ...current,
+              [mmsi]: {
+                ...existing,
+                name: nextName,
+                type: nextType,
+                shipTypeCode: staticInfo.shipTypeCode ?? existing.shipTypeCode ?? null,
+                lastUpdate: new Date(),
+              },
+            };
+          });
         }
       } catch {
         // ignore parse errors

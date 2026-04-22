@@ -1,4 +1,25 @@
-export type ShipType = 'cargo' | 'tanker' | 'passenger' | 'fishing' | 'military' | 'other';
+export type ShipType =
+  | 'cargo'
+  | 'tanker'
+  | 'passenger'
+  | 'fishing'
+  | 'tug'
+  | 'pilot'
+  | 'sar'
+  | 'towing'
+  | 'dredging'
+  | 'diving'
+  | 'military'
+  | 'sailing'
+  | 'pleasure'
+  | 'wing_in_ground'
+  | 'port_tender'
+  | 'anti_pollution'
+  | 'law_enforcement'
+  | 'medical'
+  | 'noncombatant'
+  | 'sar_aircraft'
+  | 'other';
 export type NavigationStatus = 'underway' | 'anchored' | 'moored' | 'restricted' | 'fishing' | 'sailing';
 export type ConnectionStatus = 'online' | 'connecting' | 'offline';
 
@@ -12,6 +33,7 @@ export interface AISShip {
   mmsi: string;
   name: string;
   type: ShipType;
+  shipTypeCode?: number | null;
   latitude: number;
   longitude: number;
   course: number;

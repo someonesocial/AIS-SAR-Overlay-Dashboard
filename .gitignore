@@ -16,3 +16,5 @@ app/server/node_modules/
 *.log
 .codex-logs/
 package-lock.json
+.err
+.out
