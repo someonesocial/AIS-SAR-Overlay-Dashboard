@@ -1,5 +1,11 @@
 node_modules/
 dist/
+app/dist/
+app/server/dist/
+app/src/dist/
+app/src/components/dist/
+app/src/components/map/dist/
+app/src/hooks/dist/
 .env
 .env.local
 .codex-logs/
@@ -16,5 +22,5 @@ app/server/node_modules/
 *.log
 .codex-logs/
 package-lock.json
-.err
-.out
+*.err
+*.out
