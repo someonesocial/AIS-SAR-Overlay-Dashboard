@@ -63,6 +63,7 @@ const clients = new Map();
 let aisSocket = null;
 let shipsCache = new Map();
 let isConnected = false;
+const TRACK_HISTORY_LIMIT = 120;
 
 function normalizeShipType(value) {
   const numericValue =
@@ -178,6 +179,15 @@ function mergeShipRecord(mmsi, updates) {
     next.type = normalizeShipType(next.type);
   }
 
+  if (updates.trackPoint) {
+    const track = Array.isArray(existing.track) ? existing.track.slice(-TRACK_HISTORY_LIMIT + 1) : [];
+    track.push(updates.trackPoint);
+    next.track = track.slice(-TRACK_HISTORY_LIMIT);
+    delete next.trackPoint;
+  } else if (Array.isArray(existing.track) && !Array.isArray(next.track)) {
+    next.track = existing.track;
+  }
+
   shipsCache.set(mmsi, next);
   return next;
 }
@@ -291,6 +301,11 @@ function processAISMessage(message) {
       status: report.NavigationalStatus || 0,
       timestamp: new Date(message.MetaData?.time_utc || Date.now()),
       lastUpdate: new Date(),
+      trackPoint: {
+        latitude: report.Latitude,
+        longitude: report.Longitude,
+        timestamp: new Date(message.MetaData?.time_utc || Date.now()),
+      },
     });
 
     // Clean old ships

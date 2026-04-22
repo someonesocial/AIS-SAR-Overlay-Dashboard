@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AISShip, SARDetection, SARScene } from '@/types';
+import { analyzeSarScene, buildSarComparison, MIN_SAR_DETECTION_ZOOM } from '@/lib/sarRecognition';
 
 function resolveApiBase() {
   return import.meta.env.VITE_API_URL || 'http://127.0.0.1:3001';
@@ -19,13 +20,26 @@ function normalizeDetection(detection: any): SARDetection {
   };
 }
 
-export function useSARDetections(ships: AISShip[]) {
+export function useSARDetections(ships: AISShip[], zoomLevel: number) {
   const [scenes, setScenes] = useState<SARScene[]>([]);
   const [detections, setDetections] = useState<SARDetection[]>([]);
   const [darkVessels, setDarkVessels] = useState<SARDetection[]>([]);
   const [comparison, setComparison] = useState<any>(null);
+  const refreshToken = useRef(0);
+  const shipsRef = useRef<AISShip[]>(ships);
+  const zoomRef = useRef(zoomLevel);
+
+  useEffect(() => {
+    shipsRef.current = ships;
+  }, [ships]);
+
+  useEffect(() => {
+    zoomRef.current = zoomLevel;
+  }, [zoomLevel]);
 
   const refresh = useCallback(async () => {
+    const token = ++refreshToken.current;
+
     try {
       const [detectionsRes, comparisonRes] = await Promise.all([
         fetch(`${resolveApiBase()}/api/sar/detections`),
@@ -34,13 +48,62 @@ export function useSARDetections(ships: AISShip[]) {
 
       const detectionData = await detectionsRes.json();
       const comparisonData = await comparisonRes.json();
+      const nextScenes: SARScene[] = detectionData.scenes || [];
 
-      setScenes(detectionData.scenes || []);
-      setDetections((detectionData.detections || []).map(normalizeDetection));
-      setDarkVessels((detectionData.darkVessels || []).map(normalizeDetection));
-      setComparison(comparisonData.summary || comparisonData);
+      if (refreshToken.current !== token) {
+        return;
+      }
+
+      setScenes(nextScenes);
+
+      if (zoomRef.current < MIN_SAR_DETECTION_ZOOM) {
+        setDetections([]);
+        setDarkVessels([]);
+        setComparison(
+          comparisonData.summary
+            ? { ...comparisonData.summary, zoomGate: true }
+            : { zoomGate: true },
+        );
+        return;
+      }
+
+      const analyzedScenes = await Promise.all(
+        nextScenes.map(async (scene) => {
+          try {
+            return await analyzeSarScene(scene, shipsRef.current);
+          } catch {
+            return { detections: [], darkVessels: [], matchedMMSI: new Set<string>() };
+          }
+        }),
+      );
+
+      if (refreshToken.current !== token) {
+        return;
+      }
+
+      const analyzedDetections = analyzedScenes.flatMap((result) =>
+        result.detections.map(normalizeDetection),
+      );
+      const analyzedDarkVessels = analyzedScenes.flatMap((result) =>
+        result.darkVessels.map(normalizeDetection),
+      );
+      const comparisonSummary = buildSarComparison(
+        shipsRef.current,
+        analyzedDetections,
+        analyzedDarkVessels,
+      ).summary;
+
+      setDetections(analyzedDetections);
+      setDarkVessels(analyzedDarkVessels);
+      setComparison(
+        comparisonData.summary
+          ? { ...comparisonData.summary, ...comparisonSummary }
+          : comparisonSummary,
+      );
     } catch {
       setComparison(null);
+      setDetections([]);
+      setDarkVessels([]);
     }
   }, []);
 
@@ -51,10 +114,8 @@ export function useSARDetections(ships: AISShip[]) {
   }, [refresh]);
 
   useEffect(() => {
-    if (ships.length > 0 && detections.length === 0) {
-      refresh();
-    }
-  }, [ships.length, detections.length, refresh]);
+    refresh();
+  }, [zoomLevel, refresh]);
 
   return { scenes, detections, darkVessels, comparison, refresh };
 }

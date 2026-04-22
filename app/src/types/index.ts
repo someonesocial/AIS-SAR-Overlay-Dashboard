@@ -55,6 +55,13 @@ export interface SARDetection {
   matchedMMSI?: string | null;
   estimatedLength?: number;
   estimatedType?: ShipType;
+  sceneId?: string;
+  source?: 'sar-image' | 'ais-match' | 'fallback';
+  pixelX?: number;
+  pixelY?: number;
+  matchScore?: number;
+  temporalDeltaMinutes?: number;
+  spatialDeltaKm?: number;
 }
 
 export interface SARScene {
@@ -73,7 +80,7 @@ export interface SARScene {
 }
 
 export interface MapLayer {
-  id: 'ais' | 'sar' | 'detection' | 'heatmap' | 'grid';
+  id: 'ais' | 'sar' | 'detection' | 'match' | 'heatmap' | 'grid';
   label: string;
   enabled: boolean;
   opacity: number;

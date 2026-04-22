@@ -7,6 +7,7 @@ import { SAROverlay } from './map/SAROverlay';
 import { DarkVesselMarkers } from './map/DarkVesselMarkers';
 import { HeatmapLayer } from './map/HeatmapLayer';
 import { GridOverlay } from './map/GridOverlay';
+import { MIN_SAR_DETECTION_ZOOM } from '@/lib/sarRecognition';
 
 interface MapViewProps {
   ships: AISShip[];
@@ -19,6 +20,8 @@ interface MapViewProps {
   center?: [number, number];
   zoom?: number;
   theme: 'light' | 'dark';
+  onZoomChange?: (zoom: number) => void;
+  currentZoom?: number;
 }
 
 function StatusPanel({
@@ -26,13 +29,15 @@ function StatusPanel({
   sarScenes,
   darkVessels,
   aisEnabled,
-  sarEnabled
+  sarEnabled,
+  currentZoom,
 }: {
   ships: AISShip[];
   sarScenes: SARScene[];
   darkVessels: SARDetection[];
   aisEnabled: boolean;
   sarEnabled: boolean;
+  currentZoom: number;
 }) {
   const show = (aisEnabled && ships.length === 0) || (sarEnabled && sarScenes.length === 0);
   if (!show) return null;
@@ -54,6 +59,11 @@ function StatusPanel({
         <p className="mt-2 text-xs app-muted">
           Current counts: {ships.length} AIS ships, {sarScenes.length} SAR scenes, {darkVessels.length} dark-vessel candidates.
         </p>
+        {currentZoom < MIN_SAR_DETECTION_ZOOM && (
+          <p className="mt-2 text-xs text-amber-300">
+            SAR target recognition is hidden until zoom level {MIN_SAR_DETECTION_ZOOM} or higher.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -112,6 +122,23 @@ function MapEvents({ onSelectShip }: { onSelectShip: (mmsi: string | null) => vo
   return null;
 }
 
+function ZoomReporter({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const reportZoom = () => onZoomChange(map.getZoom());
+    reportZoom();
+    map.on('zoomend', reportZoom);
+    map.on('moveend', reportZoom);
+    return () => {
+      map.off('zoomend', reportZoom);
+      map.off('moveend', reportZoom);
+    };
+  }, [map, onZoomChange]);
+
+  return null;
+}
+
 export function MapView({
   ships,
   sarScenes,
@@ -122,7 +149,9 @@ export function MapView({
   onSelectShip,
   center = [55.0, 15.0],
   zoom = 6,
-  theme
+  theme,
+  onZoomChange,
+  currentZoom = zoom
 }: MapViewProps) {
   const aisLayer = layers.find((l) => l.id === 'ais');
   const aisEnabled = aisLayer?.enabled ?? true;
@@ -136,13 +165,16 @@ export function MapView({
   const detectionEnabled = detectionLayer?.enabled ?? true;
   const detectionOpacity = detectionLayer?.opacity ?? 1;
 
+  const matchLayer = layers.find((l) => l.id === 'match');
+  const matchEnabled = matchLayer?.enabled ?? true;
+  const matchOpacity = matchLayer?.opacity ?? 0.9;
+
   const heatmapLayer = layers.find((l) => l.id === 'heatmap');
   const heatmapEnabled = heatmapLayer?.enabled ?? false;
 
   const gridLayer = layers.find((l) => l.id === 'grid');
   const gridEnabled = gridLayer?.enabled ?? true;
-  
-  const darkVesselOpacity = layers.find(l => l.id === 'detection')?.opacity ?? 1;
+
   const mapTileUrl =
     theme === 'dark'
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -159,6 +191,7 @@ export function MapView({
         preferCanvas
       >
         <MapEvents onSelectShip={onSelectShip} />
+        {onZoomChange && <ZoomReporter onZoomChange={onZoomChange} />}
         <ZoomControl position="bottomright" />
         
         <TileLayer
@@ -183,7 +216,7 @@ export function MapView({
           />
         )}
         
-        {detectionEnabled && <DarkVesselMarkers vessels={darkVessels} opacity={darkVesselOpacity} />}
+        {matchEnabled && <DarkVesselMarkers vessels={darkVessels} opacity={matchOpacity} />}
         
         {aisEnabled && (
           <ShipMarkers 
@@ -201,6 +234,7 @@ export function MapView({
         darkVessels={darkVessels}
         aisEnabled={aisEnabled}
         sarEnabled={sarEnabled}
+        currentZoom={currentZoom}
       />
 
       <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
