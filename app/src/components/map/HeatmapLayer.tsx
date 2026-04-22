@@ -13,6 +13,8 @@ export function HeatmapLayer({ ships }: HeatmapLayerProps) {
   const layerRef = useRef<L.Layer | null>(null);
   const lastDrawTimeRef = useRef<number>(0);
   const pendingDrawRef = useRef<boolean>(false);
+  const moveHandlerRef = useRef<(() => void) | null>(null);
+  const zoomHandlerRef = useRef<(() => void) | null>(null);
   const shipsRef = useRef<AISShip[]>([]);
   
   // Update ships reference without triggering redraws immediately
@@ -85,15 +87,24 @@ export function HeatmapLayer({ ships }: HeatmapLayerProps) {
         
         draw();
         
-        map.on('moveend', () => throttledDraw(), this);
-        map.on('zoomend', () => throttledDraw(), this);
+        const handleMoveEnd = () => throttledDraw();
+        const handleZoomEnd = () => throttledDraw();
+        moveHandlerRef.current = handleMoveEnd;
+        zoomHandlerRef.current = handleZoomEnd;
+        map.on('moveend', handleMoveEnd);
+        map.on('zoomend', handleZoomEnd);
       },
       
       onRemove: function() {
         if (this._canvas) {
           L.DomUtil.remove(this._canvas);
         }
-        map.off('moveend zoomend', throttledDraw, this);
+        if (moveHandlerRef.current) {
+          map.off('moveend', moveHandlerRef.current);
+        }
+        if (zoomHandlerRef.current) {
+          map.off('zoomend', zoomHandlerRef.current);
+        }
       }
     });
     

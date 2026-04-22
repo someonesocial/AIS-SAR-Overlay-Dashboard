@@ -61,25 +61,51 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
   const map = useMap();
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const tracksRef = useRef<Map<string, L.Polyline>>(new Map());
+  const markerStateRef = useRef<Map<string, { type: string; course: number; selected: boolean; opacity: number }>>(new Map());
+  const previousSelectedRef = useRef<string | null>(null);
   
   // Create/update markers
   useEffect(() => {
     const currentMarkers = markersRef.current;
     const currentTracks = tracksRef.current;
+    const currentMarkerState = markerStateRef.current;
     const newMarkers = new Map<string, L.Marker>();
     const newTracks = new Map<string, L.Polyline>();
+    const newMarkerState = new Map<string, { type: string; course: number; selected: boolean; opacity: number }>();
+
+    const selectedChanged = previousSelectedRef.current !== selectedMMSI;
     
     ships.forEach(ship => {
       const isSelected = ship.mmsi === selectedMMSI;
       const position: L.LatLngExpression = [ship.latitude, ship.longitude];
+      const nextState = {
+        type: ship.type,
+        course: ship.course,
+        selected: isSelected,
+        opacity
+      };
       
       // Create or update marker
       let marker = currentMarkers.get(ship.mmsi);
       
       if (marker) {
-        // Update position
-        marker.setLatLng(position);
-        marker.setIcon(createShipIcon(ship.type, ship.course, isSelected, opacity));
+        const prevState = currentMarkerState.get(ship.mmsi);
+        const needsPositionUpdate = marker.getLatLng().lat !== ship.latitude || marker.getLatLng().lng !== ship.longitude;
+        const needsIconUpdate =
+          !prevState ||
+          prevState.type !== nextState.type ||
+          prevState.course !== nextState.course ||
+          prevState.selected !== nextState.selected ||
+          prevState.opacity !== nextState.opacity ||
+          selectedChanged;
+
+        if (needsPositionUpdate) {
+          marker.setLatLng(position);
+        }
+
+        if (needsIconUpdate) {
+          marker.setIcon(createShipIcon(ship.type, ship.course, isSelected, opacity));
+        }
       } else {
         // Create new marker
         marker = L.marker(position, {
@@ -108,17 +134,18 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
       }
       
       newMarkers.set(ship.mmsi, marker);
+      newMarkerState.set(ship.mmsi, nextState);
       
       // Create or update track
       if (ship.track && ship.track.length > 1) {
         let track = currentTracks.get(ship.mmsi);
         
         if (track) {
-          track.remove();
+          track.setLatLngs(ship.track.map(p => [p.latitude, p.longitude] as L.LatLngExpression));
+        } else {
+          track = createTrackLine(ship.track);
+          track.addTo(map);
         }
-        
-        track = createTrackLine(ship.track);
-        track.addTo(map);
         newTracks.set(ship.mmsi, track);
       }
     });
@@ -139,6 +166,8 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
     
     markersRef.current = newMarkers;
     tracksRef.current = newTracks;
+    markerStateRef.current = newMarkerState;
+    previousSelectedRef.current = selectedMMSI;
   }, [ships, selectedMMSI, onSelectShip, map, opacity]);
   
   // Cleanup on unmount

@@ -150,6 +150,7 @@ export function MapView({
         className="h-full w-full focus:outline-none"
         zoomControl={false}
         attributionControl={false}
+        preferCanvas
       >
         <MapEvents onSelectShip={onSelectShip} />
         <ZoomControl position="bottomright" />
