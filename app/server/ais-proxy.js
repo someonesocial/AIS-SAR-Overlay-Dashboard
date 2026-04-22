@@ -65,13 +65,13 @@ function connectToAISStream() {
       console.log("✅ Connected to aisstream.io");
       isConnected = true;
 
-      // Subscribe to bounding box (Strait of Hormuz region)
+      // Subscribe to bounding box (Baltic Sea region)
       const subscribeMessage = {
         APIKey: API_KEY,
         BoundingBoxes: [
           [
-            [23, 54],
-            [27, 59],
+            [54.0, 10.0],
+            [59.0, 20.0],
           ],
         ],
         FilterMessageTypes: ["PositionReport", "ShipStaticData"],

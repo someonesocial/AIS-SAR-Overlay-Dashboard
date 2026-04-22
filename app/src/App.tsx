@@ -156,8 +156,8 @@ function App() {
               layers={layers}
               selectedShipMMSI={selectedShipMMSI}
               onSelectShip={selectShip}
-              center={[25.0, 56.5]}
-              zoom={8}
+              center={[55.0, 15.0]}
+              zoom={6}
             />
           </div>
           

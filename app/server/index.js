@@ -23,11 +23,11 @@ const wss = new WebSocket.Server({ server, path: "/ws" });
 const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 const API_KEY = process.env.AISSTREAM_API_KEY;
-// Track ships in the Strait of Hormuz
+// Track ships in the Baltic Sea
 const AIS_BOUNDING_BOXES = [
   [
-    [23, 54],
-    [27, 59],
+    [54.0, 10.0],
+    [59.0, 20.0],
   ],
 ];
 
@@ -212,7 +212,7 @@ app.get("/api/ships", (req, res) => {
 // Get SAR data with AI detections
 app.get("/api/sar/detections", async (req, res) => {
   try {
-    const { minLat = 23, maxLat = 27, minLon = 54, maxLon = 59 } = req.query;
+    const { minLat = 54.0, maxLat = 59.0, minLon = 10.0, maxLon = 20.0 } = req.query;
 
     const bbox = [
       [parseFloat(minLat), parseFloat(minLon)],
@@ -235,7 +235,7 @@ app.get("/api/sar/detections", async (req, res) => {
 // Get dark vessels (SAR detections without AIS match)
 app.get("/api/dark-vessels", async (req, res) => {
   try {
-    const { minLat = 23, maxLat = 27, minLon = 54, maxLon = 59 } = req.query;
+    const { minLat = 54.0, maxLat = 59.0, minLon = 10.0, maxLon = 20.0 } = req.query;
 
     const bbox = [
       [parseFloat(minLat), parseFloat(minLon)],
@@ -261,8 +261,8 @@ app.get("/api/comparison", async (req, res) => {
   try {
     const aisShips = Array.from(shipsCache.values());
     const bbox = [
-      [23, 54],
-      [27, 59],
+      [54.0, 10.0],
+      [59.0, 20.0],
     ];
 
     const sarResult = await getLatestSARWithDetections(bbox, aisShips);

@@ -88,8 +88,8 @@ export function MapView({
   layers,
   selectedShipMMSI,
   onSelectShip,
-  center = [25.0, 56.5],
-  zoom = 8
+  center = [55.0, 15.0],
+  zoom = 6
 }: MapViewProps) {
   const aisLayer = layers.find((l) => l.id === 'ais');
   const aisEnabled = aisLayer?.enabled ?? true;
