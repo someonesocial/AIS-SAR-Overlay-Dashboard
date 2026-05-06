@@ -12,9 +12,11 @@ type StaticShipInfo = {
   name?: string;
   type?: ShipType;
   shipTypeCode?: number | null;
+  imo?: string | null;
 };
 type RawShip = {
   mmsi?: string | number;
+  imo?: string | number | null;
   shipTypeCode?: number | null;
   type?: unknown;
   status?: unknown;
@@ -49,10 +51,14 @@ type AisMessagePayload = {
       Name?: string;
       Type?: unknown;
       UserID?: string | number;
+      ImoNumber?: string | number | null;
+      IMO?: string | number | null;
     };
     StaticDataReport?: {
       ReportA?: {
         Name?: string;
+        ImoNumber?: string | number | null;
+        IMO?: string | number | null;
       };
       ReportB?: {
         ShipType?: unknown;
@@ -103,6 +109,11 @@ function extractStaticInfo(payload: AisMessagePayload): StaticShipInfo | null {
       name: shipStatic.Name,
       type: normalizeShipType(shipStatic.Type),
       shipTypeCode: typeof shipStatic.Type === "number" ? shipStatic.Type : null,
+      imo: shipStatic.ImoNumber != null
+        ? String(shipStatic.ImoNumber)
+        : shipStatic.IMO != null
+          ? String(shipStatic.IMO)
+          : null,
     };
   }
 
@@ -114,6 +125,11 @@ function extractStaticInfo(payload: AisMessagePayload): StaticShipInfo | null {
       shipTypeCode:
         typeof staticData.ReportB.ShipType === "number"
           ? staticData.ReportB.ShipType
+          : null,
+      imo: staticData.ReportA?.ImoNumber != null
+        ? String(staticData.ReportA.ImoNumber)
+        : staticData.ReportA?.IMO != null
+          ? String(staticData.ReportA.IMO)
           : null,
     };
   }
@@ -172,6 +188,7 @@ function upsertShip(
 
   const updated = {
     mmsi,
+    imo: staticInfo?.imo ?? existing?.imo ?? null,
     name: mergedName,
     type: mergedType,
     shipTypeCode: staticInfo?.shipTypeCode ?? existing?.shipTypeCode ?? null,
@@ -229,6 +246,7 @@ export function useRealTimeAIS() {
 
           acc[mmsi] = {
             mmsi,
+            imo: ship.imo != null ? String(ship.imo) : null,
             name: ship.name || `Vessel ${mmsi.slice(-4)}`,
             type: normalizeShipType(ship.shipTypeCode ?? ship.type),
             shipTypeCode: ship.shipTypeCode ?? null,
@@ -332,7 +350,8 @@ export function useRealTimeAIS() {
 
             const nextType = staticInfo.type || existing.type;
             const nextName = staticInfo.name || existing.name;
-            if (existing.type === nextType && existing.name === nextName) {
+            const nextImo = staticInfo.imo ?? existing.imo ?? null;
+            if (existing.type === nextType && existing.name === nextName && existing.imo === nextImo) {
               return current;
             }
 
@@ -342,6 +361,7 @@ export function useRealTimeAIS() {
                 ...existing,
                 name: nextName,
                 type: nextType,
+                imo: nextImo,
                 shipTypeCode: staticInfo.shipTypeCode ?? existing.shipTypeCode ?? null,
                 lastUpdate: new Date(),
               },

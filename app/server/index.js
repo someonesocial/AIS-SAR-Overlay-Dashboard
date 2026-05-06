@@ -127,6 +127,12 @@ function extractStaticShipInfo(message) {
     return {
       name: shipStatic.Name,
       typeValue: shipStatic.Type,
+      imo:
+        shipStatic.ImoNumber != null
+          ? String(shipStatic.ImoNumber)
+          : shipStatic.IMO != null
+            ? String(shipStatic.IMO)
+            : null,
     };
   }
 
@@ -135,6 +141,12 @@ function extractStaticShipInfo(message) {
     return {
       name: staticData.ReportA?.Name || message.MetaData?.ShipName,
       typeValue: staticData.ReportB.ShipType,
+      imo:
+        staticData.ReportA?.ImoNumber != null
+          ? String(staticData.ReportA.ImoNumber)
+          : staticData.ReportA?.IMO != null
+            ? String(staticData.ReportA.IMO)
+            : null,
     };
   }
 
@@ -269,6 +281,7 @@ function processAISMessage(message) {
       name: staticInfo.name,
       type: normalizeShipType(staticInfo.typeValue),
       shipTypeCode: staticInfo.typeValue,
+      imo: staticInfo.imo,
       lastUpdate: new Date(),
     });
     return;
