@@ -5,6 +5,7 @@ const initialLayers: MapLayer[] = [
   { id: 'ais', label: 'AIS Tracks', enabled: true, opacity: 0.9 },
   { id: 'sar', label: 'SAR Imagery', enabled: true, opacity: 0.72 },
   { id: 'detection', label: 'AI Detection', enabled: true, opacity: 0.85 },
+  { id: 'match', label: 'SAR Match Layer', enabled: true, opacity: 0.9 },
   { id: 'heatmap', label: 'Heat Map', enabled: false, opacity: 0.7 },
   { id: 'grid', label: 'Grid', enabled: true, opacity: 0.55 }
 ];

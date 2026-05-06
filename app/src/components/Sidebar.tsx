@@ -11,7 +11,8 @@ import {
   Search,
   SlidersHorizontal,
   Radar,
-  Satellite
+  Satellite,
+  Crosshair
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -230,7 +231,7 @@ export function Sidebar({
                     <div className="flex items-center gap-1.5">
                       <Radar className="w-3.5 h-3.5 text-emerald-500" />
                       <span className={`text-sm ${layers.find(l => l.id === 'detection')?.enabled ? 'text-white' : 'text-gray-500'}`}>
-                        AI Detection
+                        SAR Candidates
                       </span>
                     </div>
                   </div>
@@ -246,7 +247,7 @@ export function Sidebar({
                   <div className="pl-10 space-y-2">
                     <div className="bg-gray-800/50 rounded p-2 text-[10px]">
                       <div className="flex justify-between text-gray-400">
-                        <span>SAR Detections:</span>
+                        <span>SAR Candidates:</span>
                         <span className="text-amber-400">{sarDetections.length}</span>
                       </div>
                       <div className="flex justify-between text-gray-400 mt-1">
@@ -266,6 +267,47 @@ export function Sidebar({
                     <div className="flex justify-between text-[10px] text-gray-500">
                       <span>Opacity</span>
                       <span>{Math.round((layers.find(l => l.id === 'detection')?.opacity ?? 0.8) * 100)}%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SAR Match Layer */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={layers.find(l => l.id === 'match')?.enabled ?? true}
+                      onCheckedChange={() => onToggleLayer('match')}
+                      className="data-[state=checked]:bg-red-500"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <Crosshair className="w-3.5 h-3.5 text-red-500" />
+                      <span className={`text-sm ${layers.find(l => l.id === 'match')?.enabled ? 'text-white' : 'text-gray-500'}`}>
+                        SAR Match Layer
+                      </span>
+                    </div>
+                  </div>
+                  {layers.find(l => l.id === 'match')?.enabled ? (
+                    <Eye className="w-3.5 h-3.5 text-red-400" />
+                  ) : (
+                    <EyeOff className="w-3.5 h-3.5 text-gray-600" />
+                  )}
+                </div>
+
+                {layers.find(l => l.id === 'match')?.enabled && (
+                  <div className="pl-10 pr-2">
+                    <Slider
+                      value={[layers.find(l => l.id === 'match')!.opacity * 100]}
+                      onValueChange={([v]) => onSetLayerOpacity('match', v / 100)}
+                      min={10}
+                      max={100}
+                      step={5}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-[10px] text-gray-500 mt-1">
+                      <span>Opacity</span>
+                      <span>{Math.round((layers.find(l => l.id === 'match')?.opacity ?? 0.9) * 100)}%</span>
                     </div>
                   </div>
                 )}

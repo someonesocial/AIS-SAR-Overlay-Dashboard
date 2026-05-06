@@ -26,7 +26,7 @@ function StatusPanel({
   sarScenes,
   darkVessels,
   aisEnabled,
-  sarEnabled
+  sarEnabled,
 }: {
   ships: AISShip[];
   sarScenes: SARScene[];
@@ -138,13 +138,16 @@ export function MapView({
   const detectionEnabled = detectionLayer?.enabled ?? true;
   const detectionOpacity = detectionLayer?.opacity ?? 1;
 
+  const matchLayer = layers.find((l) => l.id === 'match');
+  const matchEnabled = matchLayer?.enabled ?? true;
+  const matchOpacity = matchLayer?.opacity ?? 0.9;
+
   const heatmapLayer = layers.find((l) => l.id === 'heatmap');
   const heatmapEnabled = heatmapLayer?.enabled ?? false;
 
   const gridLayer = layers.find((l) => l.id === 'grid');
   const gridEnabled = gridLayer?.enabled ?? true;
-  
-  const darkVesselOpacity = layers.find(l => l.id === 'detection')?.opacity ?? 1;
+
   const mapTileUrl =
     theme === 'dark'
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -185,7 +188,7 @@ export function MapView({
           />
         )}
         
-        {detectionEnabled && <DarkVesselMarkers vessels={darkVessels} opacity={darkVesselOpacity} />}
+        {matchEnabled && <DarkVesselMarkers vessels={darkVessels} opacity={matchOpacity} />}
         
         {aisEnabled && (
           <ShipMarkers 

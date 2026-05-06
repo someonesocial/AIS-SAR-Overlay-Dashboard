@@ -178,7 +178,7 @@ function App() {
               selectedShipMMSI={selectedShipMMSI}
               onSelectShip={selectShip}
               center={[55.0, 15.0]}
-              zoom={6}
+              zoom={8}
               theme={theme}
             />
           </div>
