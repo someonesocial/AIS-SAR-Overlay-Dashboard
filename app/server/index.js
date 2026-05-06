@@ -25,13 +25,7 @@ const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 const API_KEY = process.env.AISSTREAM_API_KEY;
 const ASF_BROWSE_HOST = "datapool.asf.alaska.edu";
-// Track ships in the Baltic Sea
-const AIS_BOUNDING_BOXES = [
-  [
-    [54.0, 10.0],
-    [59.0, 20.0],
-  ],
-];
+let currentBbox = [[54.0, 10.0], [59.0, 20.0]];
 
 // Middleware
 app.use(cors());
@@ -184,6 +178,17 @@ function mergeShipRecord(mmsi, updates) {
 
 // ==================== AIS WebSocket Proxy ====================
 
+function sendAISSubscription() {
+  if (!aisSocket || aisSocket.readyState !== WebSocket.OPEN) return;
+  const subscribeMessage = {
+    APIKey: API_KEY,
+    BoundingBoxes: [currentBbox],
+    FilterMessageTypes: ["PositionReport", "ShipStaticData"],
+  };
+  aisSocket.send(JSON.stringify(subscribeMessage));
+  console.log("📤 AIS subscription updated:", JSON.stringify([currentBbox]));
+}
+
 function connectToAISStream() {
   if (!API_KEY) {
     console.log(
@@ -200,16 +205,7 @@ function connectToAISStream() {
     aisSocket.on("open", () => {
       console.log("✅ Connected to aisstream.io");
       isConnected = true;
-
-      // Subscribe to a wider Gulf region to improve the chance of receiving live traffic.
-      const subscribeMessage = {
-        APIKey: API_KEY,
-        BoundingBoxes: AIS_BOUNDING_BOXES,
-        FilterMessageTypes: ["PositionReport", "ShipStaticData"],
-      };
-
-      aisSocket.send(JSON.stringify(subscribeMessage));
-      console.log("📤 Subscription sent:", JSON.stringify(subscribeMessage));
+      sendAISSubscription();
       broadcastStatus("connected", "Connected to AIS Stream");
     });
 
@@ -366,6 +362,22 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Update the active bounding box and re-subscribe AIS stream
+app.post("/api/bbox", (req, res) => {
+  const { minLat, maxLat, minLon, maxLon } = req.body;
+  if (
+    typeof minLat !== "number" ||
+    typeof maxLat !== "number" ||
+    typeof minLon !== "number" ||
+    typeof maxLon !== "number"
+  ) {
+    return res.status(400).json({ error: "All bbox fields must be numbers" });
+  }
+  currentBbox = [[minLat, minLon], [maxLat, maxLon]];
+  sendAISSubscription();
+  res.json({ ok: true, bbox: currentBbox });
+});
+
 // Get all tracked ships
 app.get("/api/ships", (req, res) => {
   const ships = getTrackedShips();
@@ -493,10 +505,7 @@ app.get("/api/dark-vessels", async (req, res) => {
 app.get("/api/comparison", async (req, res) => {
   try {
     const aisShips = getTrackedShips();
-    const bbox = [
-      [54.0, 10.0],
-      [59.0, 20.0],
-    ];
+    const bbox = [[54.0, 10.0], [59.0, 20.0]];
 
     const sarResult = await getLatestSARWithDetections(bbox, aisShips);
 

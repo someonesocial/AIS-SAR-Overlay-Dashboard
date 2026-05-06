@@ -8,6 +8,8 @@ import { DarkVesselMarkers } from './map/DarkVesselMarkers';
 import { HeatmapLayer } from './map/HeatmapLayer';
 import { GridOverlay } from './map/GridOverlay';
 
+type MapBounds = { minLat: number; maxLat: number; minLon: number; maxLon: number };
+
 interface MapViewProps {
   ships: AISShip[];
   sarScenes: SARScene[];
@@ -16,6 +18,7 @@ interface MapViewProps {
   layers: MapLayer[];
   selectedShipMMSI: string | null;
   onSelectShip: (mmsi: string | null) => void;
+  onBoundsChange?: (bounds: MapBounds) => void;
   center?: [number, number];
   zoom?: number;
   theme: 'light' | 'dark';
@@ -114,6 +117,40 @@ function MapEvents({ onSelectShip }: { onSelectShip: (mmsi: string | null) => vo
   return null;
 }
 
+function MapBoundsTracker({ onBoundsChange }: { onBoundsChange?: (bounds: MapBounds) => void }) {
+  const map = useMap();
+  const callbackRef = useRef(onBoundsChange);
+  const timerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    callbackRef.current = onBoundsChange;
+  }, [onBoundsChange]);
+
+  useEffect(() => {
+    const handle = () => {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
+        const b = map.getBounds();
+        callbackRef.current?.({
+          minLat: b.getSouth(),
+          maxLat: b.getNorth(),
+          minLon: b.getWest(),
+          maxLon: b.getEast()
+        });
+      }, 500);
+    };
+    map.on('moveend', handle);
+    map.on('zoomend', handle);
+    return () => {
+      window.clearTimeout(timerRef.current);
+      map.off('moveend', handle);
+      map.off('zoomend', handle);
+    };
+  }, [map]);
+
+  return null;
+}
+
 export function MapView({
   ships,
   sarScenes,
@@ -122,6 +159,7 @@ export function MapView({
   layers,
   selectedShipMMSI,
   onSelectShip,
+  onBoundsChange,
   center = [55.0, 15.0],
   zoom = 6,
   theme
@@ -170,6 +208,7 @@ export function MapView({
 
         <DefaultView center={center} zoom={zoom} />
         <FitShipsToView ships={ships} />
+        <MapBoundsTracker onBoundsChange={onBoundsChange} />
 
         {gridEnabled && <GridOverlay />}
         

@@ -17,7 +17,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  */
 async function searchSARData(bbox, options = {}) {
   const {
-    start = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     end = new Date().toISOString(),
     processingLevel = "GRD_HD",
     beamMode = "IW",
@@ -49,16 +49,16 @@ async function searchSARData(bbox, options = {}) {
     const rawScenes = normalizeASFResponse(response.data);
 
     if (rawScenes.length > 0) {
-      console.log(`✅ Found ${rawScenes.length} SAR scenes`);
+      console.log(`Found ${rawScenes.length} SAR scenes`);
       return rawScenes.map(mapScene);
     }
 
     console.log(
-      "ℹ️  No ASF SAR scenes found for the requested region/time range",
+      "No ASF SAR scenes found for the requested region/time range",
     );
     return [];
   } catch (err) {
-    console.error("❌ ASF Search error:", err.message);
+    console.error("ASF Search error:", err.message);
     return [];
   }
 }
