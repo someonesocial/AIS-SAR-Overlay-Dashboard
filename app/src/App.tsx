@@ -84,7 +84,8 @@ function App() {
         const query = filters.searchQuery.toLowerCase();
         const matchesName = ship.name.toLowerCase().includes(query);
         const matchesMMSI = ship.mmsi.includes(query);
-        if (!matchesName && !matchesMMSI) {
+        const matchesIMO = (ship.imo || '').includes(query);
+        if (!matchesName && !matchesMMSI && !matchesIMO) {
           return false;
         }
       }

@@ -31,6 +31,7 @@ export interface ShipTrackPoint {
 
 export interface AISShip {
   mmsi: string;
+  imo?: string | null;
   name: string;
   type: ShipType;
   shipTypeCode?: number | null;
