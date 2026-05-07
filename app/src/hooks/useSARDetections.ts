@@ -98,12 +98,8 @@ export function useSARDetections(ships: AISShip[]) {
           return;
         }
 
-        nextDetections = analyzedScenes.flatMap((result) =>
-          result.detections.map(normalizeDetection),
-        );
-        nextDarkVessels = analyzedScenes.flatMap((result) =>
-          result.darkVessels.map(normalizeDetection),
-        );
+        nextDetections = analyzedScenes.flatMap((result) => result.detections);
+        nextDarkVessels = analyzedScenes.flatMap((result) => result.darkVessels);
         computedComparison = buildSarComparison(
           shipsRef.current,
           nextDetections,
