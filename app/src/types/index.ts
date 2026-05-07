@@ -22,6 +22,19 @@ export type ShipType =
   | 'other';
 export type NavigationStatus = 'underway' | 'anchored' | 'moored' | 'restricted' | 'fishing' | 'sailing';
 export type ConnectionStatus = 'online' | 'connecting' | 'offline';
+export type RegionPresetId = 'baltic' | 'north-sea' | 'mediterranean' | 'custom';
+
+export interface BoundingBox {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
+
+export interface RegionSelection {
+  presetId: RegionPresetId;
+  bbox: BoundingBox;
+}
 
 export interface ShipTrackPoint {
   latitude: number;

@@ -25,13 +25,26 @@ const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 const API_KEY = process.env.AISSTREAM_API_KEY;
 const ASF_BROWSE_HOST = "datapool.asf.alaska.edu";
-// Track ships in the Baltic Sea
-const AIS_BOUNDING_BOXES = [
-  [
-    [54.0, 10.0],
-    [59.0, 20.0],
-  ],
-];
+// Track ships in the Baltic Sea by default.
+const DEFAULT_BBOX = {
+  minLat: 54.0,
+  maxLat: 59.0,
+  minLon: 10.0,
+  maxLon: 20.0,
+};
+let activeBbox = { ...DEFAULT_BBOX };
+let reconnectTimer = null;
+
+function bboxToAisBoundingBoxes(bbox) {
+  return [
+    [
+      [bbox.minLat, bbox.minLon],
+      [bbox.maxLat, bbox.maxLon],
+    ],
+  ];
+}
+
+let aisBoundingBoxes = bboxToAisBoundingBoxes(activeBbox);
 
 // Middleware
 app.use(cors());
@@ -56,6 +69,43 @@ function toProxiedBrowseUrl(rawUrl, req) {
   } catch {
     return rawUrl;
   }
+}
+
+function readBboxFromQuery(query) {
+  return {
+    minLat: Number(query.minLat ?? activeBbox.minLat),
+    maxLat: Number(query.maxLat ?? activeBbox.maxLat),
+    minLon: Number(query.minLon ?? activeBbox.minLon),
+    maxLon: Number(query.maxLon ?? activeBbox.maxLon),
+  };
+}
+
+function validateBbox(bbox) {
+  const values = [bbox.minLat, bbox.maxLat, bbox.minLon, bbox.maxLon];
+  if (values.some((value) => !Number.isFinite(value))) {
+    return "All coordinates must be valid numbers.";
+  }
+  if (bbox.minLat < -90 || bbox.maxLat > 90) {
+    return "Latitude must be between -90 and 90.";
+  }
+  if (bbox.minLon < -180 || bbox.maxLon > 180) {
+    return "Longitude must be between -180 and 180.";
+  }
+  if (bbox.minLat >= bbox.maxLat) {
+    return "Min latitude must be smaller than max latitude.";
+  }
+  if (bbox.minLon >= bbox.maxLon) {
+    return "Min longitude must be smaller than max longitude.";
+  }
+
+  return null;
+}
+
+function bboxToSarBbox(bbox) {
+  return [
+    [bbox.minLat, bbox.minLon],
+    [bbox.maxLat, bbox.maxLon],
+  ];
 }
 
 // State
@@ -217,16 +267,21 @@ function connectToAISStream() {
   console.log("🔌 Connecting to aisstream.io...");
 
   try {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
     aisSocket = new WebSocket(AIS_STREAM_URL);
 
     aisSocket.on("open", () => {
       console.log("✅ Connected to aisstream.io");
       isConnected = true;
 
-      // Subscribe to a wider Gulf region to improve the chance of receiving live traffic.
+      // Subscribe to the currently selected monitoring region.
       const subscribeMessage = {
         APIKey: API_KEY,
-        BoundingBoxes: AIS_BOUNDING_BOXES,
+        BoundingBoxes: aisBoundingBoxes,
         FilterMessageTypes: ["PositionReport", "ShipStaticData"],
       };
 
@@ -264,11 +319,24 @@ function connectToAISStream() {
       console.log("🔌 AIS Stream disconnected, reconnecting in 5s...");
       isConnected = false;
       broadcastStatus("reconnecting", "Reconnecting...");
-      setTimeout(connectToAISStream, 5000);
+      reconnectTimer = setTimeout(connectToAISStream, 5000);
     });
   } catch (err) {
     console.error("❌ Failed to connect:", err.message);
   }
+}
+
+function applyActiveBbox(nextBbox) {
+  activeBbox = { ...nextBbox };
+  aisBoundingBoxes = bboxToAisBoundingBoxes(activeBbox);
+  shipsCache = new Map();
+
+  if (aisSocket) {
+    aisSocket.close();
+    return;
+  }
+
+  connectToAISStream();
 }
 
 function processAISMessage(message) {
@@ -333,7 +401,10 @@ function processAISMessage(message) {
 
 // ==================== WebSocket Client Handling ====================
 
-wss.on("connection", (ws, req) => {
+/**
+ * @param {import("ws").WebSocket} ws
+ */
+function handleClientConnection(ws) {
   const clientId = Date.now().toString(36);
   console.log(`👤 Client connected: ${clientId}`);
 
@@ -361,7 +432,9 @@ wss.on("connection", (ws, req) => {
     console.error(`❌ Client ${clientId} error:`, err.message);
     clients.delete(clientId);
   });
-});
+}
+
+wss.on("connection", handleClientConnection);
 
 function broadcastToClients(message) {
   clients.forEach(({ ws }) => {
@@ -390,7 +463,45 @@ app.get("/api/health", (req, res) => {
     status: "ok",
     ais: isConnected ? "connected" : API_KEY ? "connecting" : "disconnected",
     shipsTracked: shipsCache.size,
+    region: activeBbox,
     timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/api/region", (req, res) => {
+  res.json({
+    bbox: activeBbox,
+    defaultBbox: DEFAULT_BBOX,
+  });
+});
+
+app.post("/api/region", (req, res) => {
+  const nextBbox = {
+    minLat: Number(req.body.minLat),
+    maxLat: Number(req.body.maxLat),
+    minLon: Number(req.body.minLon),
+    maxLon: Number(req.body.maxLon),
+  };
+  const error = validateBbox(nextBbox);
+
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  const changed =
+    nextBbox.minLat !== activeBbox.minLat ||
+    nextBbox.maxLat !== activeBbox.maxLat ||
+    nextBbox.minLon !== activeBbox.minLon ||
+    nextBbox.maxLon !== activeBbox.maxLon;
+
+  if (changed) {
+    applyActiveBbox(nextBbox);
+  }
+
+  return res.json({
+    bbox: activeBbox,
+    changed,
+    ais: isConnected ? "connected" : API_KEY ? "connecting" : "disconnected",
   });
 });
 
@@ -403,17 +514,11 @@ app.get("/api/ships", (req, res) => {
 // Get SAR data with AI detections
 app.get("/api/sar/detections", async (req, res) => {
   try {
-    const {
-      minLat = 54.0,
-      maxLat = 59.0,
-      minLon = 10.0,
-      maxLon = 20.0,
-    } = req.query;
+    const nextBbox = readBboxFromQuery(req.query);
+    const error = validateBbox(nextBbox);
+    if (error) return res.status(400).json({ error });
 
-    const bbox = [
-      [parseFloat(minLat), parseFloat(minLon)],
-      [parseFloat(maxLat), parseFloat(maxLon)],
-    ];
+    const bbox = bboxToSarBbox(nextBbox);
     const aisShips = getTrackedShips();
 
     console.log("🔍 Fetching SAR detections...");
@@ -491,17 +596,11 @@ app.get("/api/sar/browse", async (req, res) => {
 // Get dark vessels (SAR detections without AIS match)
 app.get("/api/dark-vessels", async (req, res) => {
   try {
-    const {
-      minLat = 54.0,
-      maxLat = 59.0,
-      minLon = 10.0,
-      maxLon = 20.0,
-    } = req.query;
+    const nextBbox = readBboxFromQuery(req.query);
+    const error = validateBbox(nextBbox);
+    if (error) return res.status(400).json({ error });
 
-    const bbox = [
-      [parseFloat(minLat), parseFloat(minLon)],
-      [parseFloat(maxLat), parseFloat(maxLon)],
-    ];
+    const bbox = bboxToSarBbox(nextBbox);
     const aisShips = getTrackedShips();
 
     const result = await getLatestSARWithDetections(bbox, aisShips);
@@ -521,10 +620,11 @@ app.get("/api/dark-vessels", async (req, res) => {
 app.get("/api/comparison", async (req, res) => {
   try {
     const aisShips = getTrackedShips();
-    const bbox = [
-      [54.0, 10.0],
-      [59.0, 20.0],
-    ];
+    const nextBbox = readBboxFromQuery(req.query);
+    const error = validateBbox(nextBbox);
+    if (error) return res.status(400).json({ error });
+
+    const bbox = bboxToSarBbox(nextBbox);
 
     const sarResult = await getLatestSARWithDetections(bbox, aisShips);
 
