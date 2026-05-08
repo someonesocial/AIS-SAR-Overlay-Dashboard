@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import type {
   AISShip,
+  BoundingBox,
   ConnectionStatus,
   NavigationStatus,
   ShipType,
@@ -80,6 +81,15 @@ function resolveApiBase() {
 
 function resolveWsUrl() {
   return import.meta.env.VITE_WS_URL || "ws://127.0.0.1:3001/ws";
+}
+
+function bboxBody(bbox: BoundingBox) {
+  return JSON.stringify({
+    minLat: bbox.minLat,
+    maxLat: bbox.maxLat,
+    minLon: bbox.minLon,
+    maxLon: bbox.maxLon,
+  });
 }
 
 function normalizeStatus(value: unknown): NavigationStatus {
@@ -220,7 +230,7 @@ function upsertShip(
   };
 }
 
-export function useRealTimeAIS() {
+export function useRealTimeAIS(bbox: BoundingBox) {
   const [shipsByMmsi, setShipsByMmsi] = useState<ShipStore>({});
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
@@ -229,6 +239,27 @@ export function useRealTimeAIS() {
   );
   const staticInfoRef = useRef<Record<string, StaticShipInfo>>({});
   const payloadBuffer = useRef<AisMessagePayload[]>([]);
+  const bboxKey = `${bbox.minLat},${bbox.maxLat},${bbox.minLon},${bbox.maxLon}`;
+
+  useEffect(() => {
+    payloadBuffer.current = [];
+    staticInfoRef.current = {};
+
+    fetch(`${resolveApiBase()}/api/region`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: bboxBody(bbox),
+    })
+      .then(() => {
+        setShipsByMmsi({});
+        setConnectionStatus("connecting");
+        setStatusMessage("Updating monitored region...");
+      })
+      .catch(() => {
+        setConnectionStatus("offline");
+        setStatusMessage("Unable to update monitored region");
+      });
+  }, [bboxKey, bbox]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,7 +306,7 @@ export function useRealTimeAIS() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bboxKey]);
 
   useEffect(() => {
     const ws = new WebSocket(resolveWsUrl());

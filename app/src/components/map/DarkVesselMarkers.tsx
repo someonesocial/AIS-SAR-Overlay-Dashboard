@@ -82,6 +82,10 @@ export function DarkVesselMarkers({ vessels, opacity = 0.9 }: DarkVesselMarkersP
       
       if (marker) {
         marker.setLatLng(position);
+        marker.setIcon(createDarkVesselIcon(vessel.confidence, opacity));
+        if (!map.hasLayer(marker)) {
+          marker.addTo(map);
+        }
       } else {
         marker = L.marker(position, {
           icon: createDarkVesselIcon(vessel.confidence, opacity),
@@ -131,6 +135,7 @@ export function DarkVesselMarkers({ vessels, opacity = 0.9 }: DarkVesselMarkersP
   useEffect(() => {
     return () => {
       markersRef.current.forEach(marker => marker.remove());
+      markersRef.current.clear();
     };
   }, []);
   
