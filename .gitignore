@@ -17,10 +17,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 app/node_modules/
-app/dist/
 app/server/node_modules/
 *.log
-.codex-logs/
-package-lock.json
 *.err
 *.out
