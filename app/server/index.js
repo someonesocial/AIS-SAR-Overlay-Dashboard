@@ -108,6 +108,15 @@ function bboxToSarBbox(bbox) {
   ];
 }
 
+function isPositionInBbox(latitude, longitude, bbox) {
+  return (
+    latitude >= bbox.minLat &&
+    latitude <= bbox.maxLat &&
+    longitude >= bbox.minLon &&
+    longitude <= bbox.maxLon
+  );
+}
+
 // State
 const clients = new Map();
 let aisSocket = null;
@@ -360,6 +369,10 @@ function processAISMessage(message) {
     message.Message?.PositionReport
   ) {
     const report = message.Message.PositionReport;
+    if (!isPositionInBbox(report.Latitude, report.Longitude, activeBbox)) {
+      return;
+    }
+
     const mmsi = extractMmsi(message, report);
     if (!mmsi) return;
 
@@ -536,7 +549,7 @@ app.get("/api/sar/detections", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ SAR API error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -612,7 +625,7 @@ app.get("/api/dark-vessels", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Dark vessels API error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 

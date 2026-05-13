@@ -39,6 +39,7 @@ const MIN_EDGE_BUFFER_RATIO = 0.04;
 const MATCH_DISTANCE_KM = 4;
 const MATCH_TIME_WINDOW_MINUTES = 45;
 export const MIN_SAR_DETECTION_ZOOM = 13;
+const imageCache = new Map<string, Promise<HTMLImageElement>>();
 
 export function parseFootprintCoordinates(
   footprint?: string | null,
@@ -119,13 +120,21 @@ function getCanvasDimensions(image: HTMLImageElement) {
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+  const cached = imageCache.get(url);
+  if (cached) return cached;
+
+  const request = new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.crossOrigin = 'anonymous';
+    image.decoding = 'async';
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Unable to load SAR browse image: ${url}`));
     image.src = url;
   });
+
+  imageCache.set(url, request);
+  request.catch(() => imageCache.delete(url));
+  return request;
 }
 
 function brightnessAt(r: number, g: number, b: number): number {

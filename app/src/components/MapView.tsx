@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, ZoomControl, useMap } from 'react-leaflet';
 import type { AISShip, SARDetection, SARScene, MapLayer } from '@/types';
@@ -114,6 +114,10 @@ function MapEvents({ onSelectShip }: { onSelectShip: (mmsi: string | null) => vo
   return null;
 }
 
+function detectionKey(detection: SARDetection) {
+  return `${detection.sceneId || ''}:${detection.id}:${detection.latitude.toFixed(6)}:${detection.longitude.toFixed(6)}`;
+}
+
 export function MapView({
   ships,
   sarScenes,
@@ -147,6 +151,13 @@ export function MapView({
 
   const gridLayer = layers.find((l) => l.id === 'grid');
   const gridEnabled = gridLayer?.enabled ?? true;
+  const mapDataKey = `${center[0]}-${center[1]}-${zoom}`;
+  const visibleSarDetections = useMemo(() => {
+    if (!matchEnabled || darkVessels.length === 0) return sarDetections;
+
+    const darkKeys = new Set(darkVessels.map(detectionKey));
+    return sarDetections.filter((detection) => !darkKeys.has(detectionKey(detection)));
+  }, [sarDetections, darkVessels, matchEnabled]);
 
   const mapTileUrl =
     theme === 'dark'
@@ -180,15 +191,16 @@ export function MapView({
         
         {sarEnabled && (
           <SAROverlay 
+            key={`sar-${mapDataKey}`}
             scenes={sarScenes} 
-            detections={sarDetections} 
+            detections={visibleSarDetections} 
             opacity={sarOpacity} 
             showDetections={detectionEnabled}
             detectionOpacity={detectionOpacity}
           />
         )}
         
-        {matchEnabled && <DarkVesselMarkers vessels={darkVessels} opacity={matchOpacity} />}
+        {matchEnabled && <DarkVesselMarkers key={`dark-${mapDataKey}`} vessels={darkVessels} opacity={matchOpacity} />}
         
         {aisEnabled && (
           <ShipMarkers 
@@ -213,7 +225,7 @@ export function MapView({
           <span className="font-mono text-cyan-400">{ships.length}</span>
           <span className="ml-1 text-gray-500">AIS</span>
           <span className="mx-2 text-gray-600">|</span>
-          <span className="font-mono text-amber-400">{sarScenes.length}</span>
+          <span className="font-mono text-emerald-400">{sarScenes.length}</span>
           <span className="ml-1 text-gray-500">SAR scenes</span>
           <span className="mx-2 text-gray-600">|</span>
           <span className="font-mono text-red-400">{darkVessels.length}</span>

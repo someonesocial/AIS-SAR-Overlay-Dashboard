@@ -87,7 +87,7 @@ function App() {
   
   // Selected ship
   const [selectedShipMMSI, setSelectedShipMMSI] = useState<string | null>(null);
-  
+
   // Filter ships
   const filteredShips = useMemo(() => {
     return ships.filter(ship => {
@@ -160,6 +160,11 @@ function App() {
   const selectShip = useCallback((mmsi: string | null) => {
     setSelectedShipMMSI(mmsi);
   }, []);
+
+  const updateRegion = useCallback((nextRegion: RegionSelection) => {
+    setSelectedShipMMSI(null);
+    setRegion(nextRegion);
+  }, []);
   
   // Refresh all data
   const refreshData = useCallback(() => {
@@ -197,7 +202,7 @@ function App() {
           sarDetections={detections}
           darkVessels={darkVessels}
           region={region}
-          onSetRegion={setRegion}
+          onSetRegion={updateRegion}
         />
         
         {/* Map and Bottom Panel */}
