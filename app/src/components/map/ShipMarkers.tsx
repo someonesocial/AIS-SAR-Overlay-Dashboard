@@ -3,6 +3,7 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { AISShip } from '@/types';
 import { shipTypeConfig } from '@/data/constants';
+import { getMmsiFlagState } from '@/data/mmsiCountries';
 
 interface ShipMarkersProps {
   ships: AISShip[];
@@ -71,6 +72,19 @@ function createTrackLine(track: { latitude: number; longitude: number }[]): L.Po
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatFlagStateLabel(state: { name: string } | null): string {
+  return state?.name || 'Flag state unavailable';
+}
+
 export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }: ShipMarkersProps) {
   const map = useMap();
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -92,6 +106,16 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
     ships.forEach(ship => {
       const isSelected = ship.mmsi === selectedMMSI;
       const position: L.LatLngExpression = [ship.latitude, ship.longitude];
+      const vesselFinderId = ship.imo || ship.mmsi;
+      const vesselFinderUrl = `https://www.vesselfinder.com/vessels/details/${encodeURIComponent(vesselFinderId)}`;
+      const flagState = getMmsiFlagState(ship.mmsi);
+      const flagImage = flagState
+        ? `https://flagcdn.com/w80/${flagState.iso2}.png`
+        : null;
+      const shipName = escapeHtml(ship.name);
+      const shipMmsi = escapeHtml(ship.mmsi);
+      const shipTypeLabel = escapeHtml(shipTypeConfig[ship.type]?.label || ship.type);
+      const vesselFinderLabel = ship.imo ? 'Open by IMO on VesselFinder' : 'Open by MMSI on VesselFinder';
       const nextState = {
         type: ship.type,
         course: ship.course,
@@ -137,13 +161,48 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
         
         // Popup with ship details
         marker.bindPopup(`
-          <div class="text-xs min-w-[180px]">
-            <p class="font-semibold text-white">${ship.name}</p>
-            <p class="text-gray-400 font-mono">${ship.mmsi}</p>
-            <div class="mt-1 space-y-0 leading-tight">
-              <p>Type: <span class="text-cyan-300 font-medium">${shipTypeConfig[ship.type]?.label || ship.type}</span></p>
-              <p>${ship.speed.toFixed(1)} kn | ${ship.course.toFixed(0)}°</p>
+          <div class="ship-popup-card">
+            <div class="ship-popup-header">
+              <div class="ship-popup-flag-wrap">
+                ${flagImage ? `<img class="ship-popup-flag" src="${flagImage}" alt="${escapeHtml(formatFlagStateLabel(flagState))} flag" />` : `<div class="ship-popup-flag ship-popup-flag-fallback">?</div>`}
+              </div>
+              <div class="ship-popup-titleblock">
+                <p class="ship-popup-title">${shipName}</p>
+                <p class="ship-popup-subtitle">${formatFlagStateLabel(flagState)}</p>
+              </div>
             </div>
+
+            <div class="ship-popup-topline">
+              <span class="ship-popup-badge">${ship.imo ? 'IMO linked' : 'MMSI linked'}</span>
+            </div>
+
+            <div class="ship-popup-meta">
+              <div>
+                <span class="ship-popup-meta-label">MMSI</span>
+                <span class="ship-popup-mono">${shipMmsi}</span>
+              </div>
+              <div>
+                <span class="ship-popup-meta-label">Type</span>
+                <span class="ship-popup-pill">${shipTypeLabel}</span>
+              </div>
+              <div>
+                <span class="ship-popup-meta-label">Speed</span>
+                <span class="ship-popup-value">${ship.speed.toFixed(1)} kn</span>
+              </div>
+              <div>
+                <span class="ship-popup-meta-label">Course</span>
+                <span class="ship-popup-value">${ship.course.toFixed(0)}°</span>
+              </div>
+            </div>
+
+            <a
+              href="${vesselFinderUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="ship-popup-cta"
+            >
+              ${escapeHtml(vesselFinderLabel)}
+            </a>
           </div>
         `, {
           offset: [0, -10],
@@ -151,7 +210,7 @@ export function ShipMarkers({ ships, selectedMMSI, onSelectShip, opacity = 0.9 }
           autoPan: true,
           autoPanPadding: [24, 24],
           closeOnClick: false,
-          maxWidth: 190,
+          maxWidth: 320,
           className: 'ship-popup'
         });
         

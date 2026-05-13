@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { AISShip, SARDetection, Statistics } from '@/types';
-import { shipTypeConfig, statusLabels } from '@/data/constants';
+import { shipTypeConfig, statusLabels, shipTypeOrder } from '@/data/constants';
 import { 
   BarChart, 
   Bar, 
@@ -91,11 +91,11 @@ export function BottomPanel({
     );
   }
   
-  // Prepare chart data
-  const typeChartData = Object.entries(statistics.byType).map(([type, count]) => ({
-    name: shipTypeConfig[type as keyof typeof shipTypeConfig]?.label || type,
-    value: count,
-    color: shipTypeConfig[type as keyof typeof shipTypeConfig]?.color || '#6b7280'
+  // Prepare chart data in stable order (include zero counts)
+  const typeChartData = shipTypeOrder.map((type) => ({
+    name: shipTypeConfig[type]?.label || type,
+    value: statistics.byType?.[type] || 0,
+    color: shipTypeConfig[type]?.color || '#6b7280'
   }));
   
   const speedDistribution = [

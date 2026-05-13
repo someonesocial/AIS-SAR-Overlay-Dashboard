@@ -7,10 +7,30 @@ import { useRealTimeAIS } from '@/hooks/useRealTimeAIS';
 import { useSARDetections } from '@/hooks/useSARDetections';
 import { useMapLayers } from '@/hooks/useMapLayers';
 import { Toaster } from '@/components/ui/sonner';
-import type { FilterState, ShipType } from '@/types';
+import { defaultRegion, getRegionView, regionPresets, validateBoundingBox, shipTypeOrder } from '@/data/constants';
+import type { BoundingBox, FilterState, RegionSelection, ShipType } from '@/types';
 
 type ThemeMode = 'light' | 'dark';
 type MapBounds = { minLat: number; maxLat: number; minLon: number; maxLon: number };
+
+function readStoredRegion(): RegionSelection {
+  try {
+    const raw = localStorage.getItem('app-region');
+    if (!raw) return defaultRegion;
+
+    const parsed = JSON.parse(raw) as Partial<RegionSelection>;
+    const preset = regionPresets.find((item) => item.id === parsed.presetId);
+    const bbox = parsed.bbox as BoundingBox | undefined;
+    if (!bbox || validateBoundingBox(bbox)) return defaultRegion;
+
+    return {
+      presetId: preset ? preset.id : 'custom',
+      bbox: preset ? preset.bbox : bbox,
+    };
+  } catch {
+    return defaultRegion;
+  }
+}
 
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -27,12 +47,19 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  const [region, setRegion] = useState<RegionSelection>(readStoredRegion);
+  const regionView = useMemo(() => getRegionView(region), [region]);
+
+  useEffect(() => {
+    localStorage.setItem('app-region', JSON.stringify(region));
+  }, [region]);
+
   // Real-time AIS data
   const {
     ships,
     connectionStatus,
     statusMessage
-  } = useRealTimeAIS();
+  } = useRealTimeAIS(region.bbox);
 
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     const apiBase = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://127.0.0.1:3001';
@@ -50,7 +77,7 @@ function App() {
     darkVessels,
     comparison,
     refresh: refreshSAR
-  } = useSARDetections(ships);
+  } = useSARDetections(ships, region.bbox);
   
   // Map layers
   const {
@@ -70,7 +97,7 @@ function App() {
   
   // Selected ship
   const [selectedShipMMSI, setSelectedShipMMSI] = useState<string | null>(null);
-  
+
   // Filter ships
   const filteredShips = useMemo(() => {
     return ships.filter(ship => {
@@ -94,7 +121,8 @@ function App() {
         const query = filters.searchQuery.toLowerCase();
         const matchesName = ship.name.toLowerCase().includes(query);
         const matchesMMSI = ship.mmsi.includes(query);
-        if (!matchesName && !matchesMMSI) {
+        const matchesIMO = (ship.imo || '').includes(query);
+        if (!matchesName && !matchesMMSI && !matchesIMO) {
           return false;
         }
       }
@@ -108,10 +136,15 @@ function App() {
     const activeShips = filteredShips.filter(s => s.status === 'underway');
     const totalSpeed = activeShips.reduce((sum, s) => sum + s.speed, 0);
     
-    const byType = filteredShips.reduce((acc, ship) => {
-      acc[ship.type] = (acc[ship.type] || 0) + 1;
+    // Ensure a stable set of keys (including zero counts) so charts remain stable
+    const byType = shipTypeOrder.reduce((acc, t) => {
+      acc[t] = 0;
       return acc;
     }, {} as Record<string, number>);
+    for (const ship of filteredShips) {
+      const t = ship.type || 'other';
+      byType[t] = (byType[t] || 0) + 1;
+    }
     
     return {
       totalShips: filteredShips.length,
@@ -136,6 +169,11 @@ function App() {
   // Select ship
   const selectShip = useCallback((mmsi: string | null) => {
     setSelectedShipMMSI(mmsi);
+  }, []);
+
+  const updateRegion = useCallback((nextRegion: RegionSelection) => {
+    setSelectedShipMMSI(null);
+    setRegion(nextRegion);
   }, []);
   
   // Refresh all data
@@ -173,6 +211,8 @@ function App() {
           onSelectShip={selectShip}
           sarDetections={detections}
           darkVessels={darkVessels}
+          region={region}
+          onSetRegion={updateRegion}
         />
         
         {/* Map and Bottom Panel */}
@@ -180,6 +220,7 @@ function App() {
           {/* Map */}
           <div className="flex-1 relative">
             <MapView
+              key={`${region.bbox.minLat}-${region.bbox.maxLat}-${region.bbox.minLon}-${region.bbox.maxLon}`}
               ships={filteredShips}
               sarScenes={scenes}
               sarDetections={detections}
@@ -188,6 +229,8 @@ function App() {
               selectedShipMMSI={selectedShipMMSI}
               onSelectShip={selectShip}
               onBoundsChange={handleBoundsChange}
+              center={regionView.center}
+              zoom={regionView.zoom}
               theme={theme}
             />
           </div>

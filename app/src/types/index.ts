@@ -22,6 +22,19 @@ export type ShipType =
   | 'other';
 export type NavigationStatus = 'underway' | 'anchored' | 'moored' | 'restricted' | 'fishing' | 'sailing';
 export type ConnectionStatus = 'online' | 'connecting' | 'offline';
+export type RegionPresetId = 'baltic' | 'north-sea' | 'mediterranean' | 'custom';
+
+export interface BoundingBox {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
+
+export interface RegionSelection {
+  presetId: RegionPresetId;
+  bbox: BoundingBox;
+}
 
 export interface ShipTrackPoint {
   latitude: number;
@@ -31,6 +44,7 @@ export interface ShipTrackPoint {
 
 export interface AISShip {
   mmsi: string;
+  imo?: string | null;
   name: string;
   type: ShipType;
   shipTypeCode?: number | null;
@@ -55,6 +69,13 @@ export interface SARDetection {
   matchedMMSI?: string | null;
   estimatedLength?: number;
   estimatedType?: ShipType;
+  sceneId?: string;
+  source?: 'sar-image' | 'ais-match' | 'fallback';
+  pixelX?: number;
+  pixelY?: number;
+  matchScore?: number;
+  temporalDeltaMinutes?: number;
+  spatialDeltaKm?: number;
 }
 
 export interface SARScene {
@@ -73,7 +94,7 @@ export interface SARScene {
 }
 
 export interface MapLayer {
-  id: 'ais' | 'sar' | 'detection' | 'heatmap' | 'grid';
+  id: 'ais' | 'sar' | 'detection' | 'match' | 'heatmap' | 'grid';
   label: string;
   enabled: boolean;
   opacity: number;

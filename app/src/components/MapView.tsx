@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, ZoomControl, useMap } from 'react-leaflet';
 import type { AISShip, SARDetection, SARScene, MapLayer } from '@/types';
@@ -29,7 +29,7 @@ function StatusPanel({
   sarScenes,
   darkVessels,
   aisEnabled,
-  sarEnabled
+  sarEnabled,
 }: {
   ships: AISShip[];
   sarScenes: SARScene[];
@@ -149,6 +149,8 @@ function MapBoundsTracker({ onBoundsChange }: { onBoundsChange?: (bounds: MapBou
   }, [map]);
 
   return null;
+function detectionKey(detection: SARDetection) {
+  return `${detection.sceneId || ''}:${detection.id}:${detection.latitude.toFixed(6)}:${detection.longitude.toFixed(6)}`;
 }
 
 export function MapView({
@@ -176,13 +178,23 @@ export function MapView({
   const detectionEnabled = detectionLayer?.enabled ?? true;
   const detectionOpacity = detectionLayer?.opacity ?? 1;
 
+  const matchLayer = layers.find((l) => l.id === 'match');
+  const matchEnabled = matchLayer?.enabled ?? true;
+  const matchOpacity = matchLayer?.opacity ?? 0.9;
+
   const heatmapLayer = layers.find((l) => l.id === 'heatmap');
   const heatmapEnabled = heatmapLayer?.enabled ?? false;
 
   const gridLayer = layers.find((l) => l.id === 'grid');
   const gridEnabled = gridLayer?.enabled ?? true;
-  
-  const darkVesselOpacity = layers.find(l => l.id === 'detection')?.opacity ?? 1;
+  const mapDataKey = `${center[0]}-${center[1]}-${zoom}`;
+  const visibleSarDetections = useMemo(() => {
+    if (!matchEnabled || darkVessels.length === 0) return sarDetections;
+
+    const darkKeys = new Set(darkVessels.map(detectionKey));
+    return sarDetections.filter((detection) => !darkKeys.has(detectionKey(detection)));
+  }, [sarDetections, darkVessels, matchEnabled]);
+
   const mapTileUrl =
     theme === 'dark'
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -216,15 +228,16 @@ export function MapView({
         
         {sarEnabled && (
           <SAROverlay 
+            key={`sar-${mapDataKey}`}
             scenes={sarScenes} 
-            detections={sarDetections} 
+            detections={visibleSarDetections} 
             opacity={sarOpacity} 
             showDetections={detectionEnabled}
             detectionOpacity={detectionOpacity}
           />
         )}
         
-        {detectionEnabled && <DarkVesselMarkers vessels={darkVessels} opacity={darkVesselOpacity} />}
+        {matchEnabled && <DarkVesselMarkers key={`dark-${mapDataKey}`} vessels={darkVessels} opacity={matchOpacity} />}
         
         {aisEnabled && (
           <ShipMarkers 
@@ -249,7 +262,7 @@ export function MapView({
           <span className="font-mono text-cyan-400">{ships.length}</span>
           <span className="ml-1 text-gray-500">AIS</span>
           <span className="mx-2 text-gray-600">|</span>
-          <span className="font-mono text-amber-400">{sarScenes.length}</span>
+          <span className="font-mono text-emerald-400">{sarScenes.length}</span>
           <span className="ml-1 text-gray-500">SAR scenes</span>
           <span className="mx-2 text-gray-600">|</span>
           <span className="font-mono text-red-400">{darkVessels.length}</span>
