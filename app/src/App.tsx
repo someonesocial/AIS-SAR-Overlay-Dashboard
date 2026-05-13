@@ -11,6 +11,7 @@ import { defaultRegion, getRegionView, regionPresets, validateBoundingBox, shipT
 import type { BoundingBox, FilterState, RegionSelection, ShipType } from '@/types';
 
 type ThemeMode = 'light' | 'dark';
+type MapBounds = { minLat: number; maxLat: number; minLon: number; maxLon: number };
 
 function readStoredRegion(): RegionSelection {
   try {
@@ -54,19 +55,28 @@ function App() {
   }, [region]);
 
   // Real-time AIS data
-  const { 
-    ships, 
-    connectionStatus, 
-    statusMessage 
+  const {
+    ships,
+    connectionStatus,
+    statusMessage
   } = useRealTimeAIS(region.bbox);
-  
+
+  const handleBoundsChange = useCallback((bounds: MapBounds) => {
+    const apiBase = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://127.0.0.1:3001';
+    fetch(`${apiBase}/api/bbox`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bounds)
+    }).catch(() => {});
+  }, []);
+
   // SAR detections with AI
-  const { 
+  const {
     scenes,
-    detections, 
-    darkVessels, 
-    comparison, 
-    refresh: refreshSAR 
+    detections,
+    darkVessels,
+    comparison,
+    refresh: refreshSAR
   } = useSARDetections(ships, region.bbox);
   
   // Map layers
@@ -218,6 +228,7 @@ function App() {
               layers={layers}
               selectedShipMMSI={selectedShipMMSI}
               onSelectShip={selectShip}
+              onBoundsChange={handleBoundsChange}
               center={regionView.center}
               zoom={regionView.zoom}
               theme={theme}
