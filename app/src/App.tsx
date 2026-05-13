@@ -7,7 +7,7 @@ import { useRealTimeAIS } from '@/hooks/useRealTimeAIS';
 import { useSARDetections } from '@/hooks/useSARDetections';
 import { useMapLayers } from '@/hooks/useMapLayers';
 import { Toaster } from '@/components/ui/sonner';
-import { defaultRegion, getRegionView, regionPresets, validateBoundingBox } from '@/data/constants';
+import { defaultRegion, getRegionView, regionPresets, validateBoundingBox, shipTypeOrder } from '@/data/constants';
 import type { BoundingBox, FilterState, RegionSelection, ShipType } from '@/types';
 
 type ThemeMode = 'light' | 'dark';
@@ -126,10 +126,15 @@ function App() {
     const activeShips = filteredShips.filter(s => s.status === 'underway');
     const totalSpeed = activeShips.reduce((sum, s) => sum + s.speed, 0);
     
-    const byType = filteredShips.reduce((acc, ship) => {
-      acc[ship.type] = (acc[ship.type] || 0) + 1;
+    // Ensure a stable set of keys (including zero counts) so charts remain stable
+    const byType = shipTypeOrder.reduce((acc, t) => {
+      acc[t] = 0;
       return acc;
     }, {} as Record<string, number>);
+    for (const ship of filteredShips) {
+      const t = ship.type || 'other';
+      byType[t] = (byType[t] || 0) + 1;
+    }
     
     return {
       totalShips: filteredShips.length,
