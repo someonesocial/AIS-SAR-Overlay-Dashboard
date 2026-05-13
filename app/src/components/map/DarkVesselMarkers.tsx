@@ -13,24 +13,21 @@ interface DarkVesselMarkersProps {
   opacity?: number;
 }
 
-// Create dark vessel icon (pulsing red)
+// Create dark vessel icon
 function createDarkVesselIcon(confidence: number, opacity: number): L.DivIcon {
   const size = 16 + confidence * 8;
   
   const svg = `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="overflow: visible;">
-      <!-- Pulsing ring -->
+      <!-- Static alert ring -->
       <circle 
         cx="${size/2}" cy="${size/2}" 
-        r="${size}" 
+        r="${size * 0.72}" 
         fill="none" 
         stroke="#ef4444" 
-        stroke-width="1"
-        opacity="${0.3 * opacity}"
-      >
-        <animate attributeName="r" from="${size}" to="${size * 2}" dur="1.5s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" from="${0.3 * opacity}" to="0" dur="1.5s" repeatCount="indefinite"/>
-      </circle>
+        stroke-width="2"
+        opacity="${0.35 * opacity}"
+      />
       
       <!-- Core marker -->
       <circle 

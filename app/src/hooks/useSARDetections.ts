@@ -15,6 +15,10 @@ function bboxQuery(bbox: BoundingBox) {
   }).toString();
 }
 
+function bboxKey(bbox: BoundingBox) {
+  return `${bbox.minLat},${bbox.maxLat},${bbox.minLon},${bbox.maxLon}`;
+}
+
 type RawDetection = {
   id?: string;
   latitude?: number | string;
@@ -39,6 +43,14 @@ type ComparisonResponse = {
   summary?: ComparisonSummary;
 };
 
+type SarAnalysisResult = Awaited<ReturnType<typeof analyzeSarScene>>;
+
+function yieldToBrowser() {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, 0);
+  });
+}
+
 function normalizeDetection(detection: RawDetection): SARDetection {
   return {
     id: detection.id || crypto.randomUUID(),
@@ -60,10 +72,25 @@ export function useSARDetections(ships: AISShip[], bbox: BoundingBox) {
   const [comparison, setComparison] = useState<ComparisonSummary | null>(null);
   const refreshToken = useRef(0);
   const shipsRef = useRef<AISShip[]>(ships);
+  const activeBboxKey = bboxKey(bbox);
 
   useEffect(() => {
     shipsRef.current = ships;
   }, [ships]);
+
+  useEffect(() => {
+    refreshToken.current += 1;
+    const resetTimer = window.setTimeout(() => {
+      setScenes([]);
+      setDetections([]);
+      setDarkVessels([]);
+      setComparison(null);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(resetTimer);
+    };
+  }, [activeBboxKey]);
 
   const refresh = useCallback(async () => {
     const token = ++refreshToken.current;
@@ -93,15 +120,21 @@ export function useSARDetections(ships: AISShip[], bbox: BoundingBox) {
       let computedComparison: ComparisonSummary | null = null;
 
       if (nextScenes.length > 0) {
-        const analyzedScenes = await Promise.all(
-          nextScenes.map(async (scene) => {
-            try {
-              return await analyzeSarScene(scene, shipsRef.current);
-            } catch {
-              return { detections: [], darkVessels: [], matchedMMSI: new Set<string>() };
-            }
-          }),
-        );
+        const analyzedScenes: SarAnalysisResult[] = [];
+
+        for (const scene of nextScenes) {
+          if (refreshToken.current !== token) {
+            return;
+          }
+
+          try {
+            analyzedScenes.push(await analyzeSarScene(scene, shipsRef.current));
+          } catch {
+            analyzedScenes.push({ detections: [], darkVessels: [], matchedMMSI: new Set<string>() });
+          }
+
+          await yieldToBrowser();
+        }
 
         if (refreshToken.current !== token) {
           return;

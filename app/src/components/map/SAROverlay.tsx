@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { SARDetection, SARScene } from '@/types';
@@ -102,21 +102,45 @@ export function SAROverlay({
   const map = useMap();
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const overlaysRef = useRef<L.Layer[]>([]);
+  const imageOverlaysRef = useRef<L.ImageOverlay[]>([]);
+  const opacityRef = useRef(opacity);
+  const sortedScenes = useMemo(
+    () =>
+      [...scenes]
+        .sort((a, b) => {
+          const aTime = a.acquisitionDate ? new Date(a.acquisitionDate).getTime() : 0;
+          const bTime = b.acquisitionDate ? new Date(b.acquisitionDate).getTime() : 0;
+          return bTime - aTime;
+        }),
+    [scenes],
+  );
+  const sceneSignature = useMemo(
+    () =>
+      sortedScenes
+        .map((scene) =>
+          [
+            scene.id,
+            scene.sceneName,
+            scene.acquisitionDate,
+            scene.footprint,
+            scene.browseUrl,
+          ].join('|'),
+        )
+        .join('||'),
+    [sortedScenes],
+  );
+  useEffect(() => {
+    opacityRef.current = opacity;
+  }, [opacity]);
   
   // Render real SAR scene footprints and image overlays
   useEffect(() => {
     overlaysRef.current.forEach((layer) => layer.remove());
     overlaysRef.current = [];
+    imageOverlaysRef.current = [];
+    const scenesToRender = sortedScenes;
 
-    const sortedScenes = [...scenes]
-      .sort((a, b) => {
-        const aTime = a.acquisitionDate ? new Date(a.acquisitionDate).getTime() : 0;
-        const bTime = b.acquisitionDate ? new Date(b.acquisitionDate).getTime() : 0;
-        return bTime - aTime;
-      })
-      .slice(0, 14);
-
-    sortedScenes.forEach((scene, index) => {
+    scenesToRender.forEach((scene, index) => {
       const coords = parseFootprint(scene.footprint);
       if (coords.length < 3) return;
 
@@ -151,7 +175,7 @@ export function SAROverlay({
       if (scene.browseUrl) {
         const overlayBounds = polygon.getBounds();
         const imageOverlay = L.imageOverlay(scene.browseUrl, overlayBounds, {
-          opacity: Math.min(Math.max(opacity, 0), 1),
+          opacity: Math.min(Math.max(opacityRef.current, 0), 1),
           interactive: false,
           className: 'leaflet-sar-image'
         });
@@ -171,8 +195,9 @@ export function SAROverlay({
         }
 
         imageOverlay.addTo(map);
-        imageOverlay.setZIndex(400 + (sortedScenes.length - index));
+        imageOverlay.setZIndex(400 + (scenesToRender.length - index));
         overlaysRef.current.push(imageOverlay);
+        imageOverlaysRef.current.push(imageOverlay);
       }
 
     });
@@ -180,8 +205,14 @@ export function SAROverlay({
     return () => {
       overlaysRef.current.forEach((layer) => layer.remove());
       overlaysRef.current = [];
+      imageOverlaysRef.current = [];
     };
-  }, [map, scenes, opacity]);
+  }, [map, sceneSignature, sortedScenes]);
+
+  useEffect(() => {
+    const nextOpacity = Math.min(Math.max(opacity, 0), 1);
+    imageOverlaysRef.current.forEach((overlay) => overlay.setOpacity(nextOpacity));
+  }, [opacity]);
   
   // Create/update detection markers
   useEffect(() => {

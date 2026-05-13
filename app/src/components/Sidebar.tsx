@@ -224,17 +224,17 @@ export function Sidebar({
                     <Switch
                       checked={layers.find(l => l.id === 'sar')?.enabled ?? false}
                       onCheckedChange={() => onToggleLayer('sar')}
-                      className="data-[state=checked]:bg-amber-500"
+                      className="data-[state=checked]:bg-emerald-500"
                     />
                     <div className="flex items-center gap-1.5">
-                      <Satellite className="w-3.5 h-3.5 text-amber-500" />
+                      <Satellite className="w-3.5 h-3.5 text-emerald-500" />
                       <span className={`text-sm ${layers.find(l => l.id === 'sar')?.enabled ? 'text-white' : 'text-gray-500'}`}>
                         SAR Imagery
                       </span>
                     </div>
                   </div>
                   {layers.find(l => l.id === 'sar')?.enabled ? (
-                    <Eye className="w-3.5 h-3.5 text-amber-400" />
+                    <Eye className="w-3.5 h-3.5 text-emerald-400" />
                   ) : (
                     <EyeOff className="w-3.5 h-3.5 text-gray-600" />
                   )}
@@ -265,17 +265,17 @@ export function Sidebar({
                     <Switch
                       checked={layers.find(l => l.id === 'detection')?.enabled ?? true}
                       onCheckedChange={() => onToggleLayer('detection')}
-                      className="data-[state=checked]:bg-emerald-500"
+                      className="data-[state=checked]:bg-amber-500"
                     />
                     <div className="flex items-center gap-1.5">
-                      <Radar className="w-3.5 h-3.5 text-emerald-500" />
+                      <Radar className="w-3.5 h-3.5 text-amber-500" />
                       <span className={`text-sm ${layers.find(l => l.id === 'detection')?.enabled ? 'text-white' : 'text-gray-500'}`}>
                         SAR Candidates
                       </span>
                     </div>
                   </div>
                   {layers.find(l => l.id === 'detection')?.enabled ? (
-                    <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                    <Eye className="w-3.5 h-3.5 text-amber-400" />
                   ) : (
                     <EyeOff className="w-3.5 h-3.5 text-gray-600" />
                   )}

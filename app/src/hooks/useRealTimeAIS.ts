@@ -92,6 +92,15 @@ function bboxBody(bbox: BoundingBox) {
   });
 }
 
+function isWithinBbox(latitude: number, longitude: number, bbox: BoundingBox) {
+  return (
+    latitude >= bbox.minLat &&
+    latitude <= bbox.maxLat &&
+    longitude >= bbox.minLon &&
+    longitude <= bbox.maxLon
+  );
+}
+
 function normalizeStatus(value: unknown): NavigationStatus {
   const map: Record<number, NavigationStatus> = {
     0: "underway",
@@ -155,6 +164,36 @@ function extractStaticMmsi(payload: AisMessagePayload): string {
       payload.UserID ||
       "",
   );
+}
+
+function normalizeRawShip(ship: RawShip): AISShip | null {
+  const mmsi = String(ship.mmsi || "");
+  if (!mmsi || ship.latitude === undefined || ship.longitude === undefined) {
+    return null;
+  }
+
+  return {
+    mmsi,
+    imo: ship.imo != null ? String(ship.imo) : null,
+    name: ship.name || `Vessel ${mmsi.slice(-4)}`,
+    type: normalizeShipType(ship.shipTypeCode ?? ship.type),
+    shipTypeCode: ship.shipTypeCode ?? null,
+    latitude: ship.latitude,
+    longitude: ship.longitude,
+    course: Number(ship.course || 0),
+    speed: Number(ship.speed || 0),
+    heading: Number(ship.heading || 0),
+    status: normalizeStatus(ship.status),
+    timestamp: new Date(ship.timestamp || Date.now()),
+    lastUpdate: new Date(ship.lastUpdate || Date.now()),
+    track: [
+      {
+        latitude: ship.latitude,
+        longitude: ship.longitude,
+        timestamp: new Date(),
+      },
+    ],
+  };
 }
 
 function upsertShip(
@@ -239,74 +278,56 @@ export function useRealTimeAIS(bbox: BoundingBox) {
   );
   const staticInfoRef = useRef<Record<string, StaticShipInfo>>({});
   const payloadBuffer = useRef<AisMessagePayload[]>([]);
+  const bboxRef = useRef<BoundingBox>(bbox);
+  const regionRequestRef = useRef(0);
   const bboxKey = `${bbox.minLat},${bbox.maxLat},${bbox.minLon},${bbox.maxLon}`;
 
   useEffect(() => {
+    const requestId = ++regionRequestRef.current;
+    bboxRef.current = bbox;
     payloadBuffer.current = [];
     staticInfoRef.current = {};
+    const resetTimer = window.setTimeout(() => {
+      if (regionRequestRef.current !== requestId) return;
+      setShipsByMmsi({});
+      setConnectionStatus("connecting");
+      setStatusMessage("Updating monitored region...");
+    }, 0);
 
     fetch(`${resolveApiBase()}/api/region`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: bboxBody(bbox),
     })
-      .then(() => {
-        setShipsByMmsi({});
-        setConnectionStatus("connecting");
-        setStatusMessage("Updating monitored region...");
-      })
-      .catch(() => {
-        setConnectionStatus("offline");
-        setStatusMessage("Unable to update monitored region");
-      });
-  }, [bboxKey, bbox]);
+      .then(async () => {
+        if (regionRequestRef.current !== requestId) return;
 
-  useEffect(() => {
-    let cancelled = false;
+        const res = await fetch(`${resolveApiBase()}/api/ships`);
+        const data = (await res.json()) as { ships?: RawShip[] };
+        if (regionRequestRef.current !== requestId) return;
 
-    fetch(`${resolveApiBase()}/api/ships`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        const initialShips = ((data as { ships?: RawShip[] }).ships || []) as RawShip[];
-        const initial = initialShips.reduce((acc: ShipStore, ship: RawShip) => {
-          const mmsi = String(ship.mmsi || "");
-          if (!mmsi || ship.latitude === undefined || ship.longitude === undefined) {
+        const initial = (data.ships || []).reduce((acc: ShipStore, ship: RawShip) => {
+          const normalized = normalizeRawShip(ship);
+          if (!normalized || !isWithinBbox(normalized.latitude, normalized.longitude, bbox)) {
             return acc;
           }
 
-          acc[mmsi] = {
-            mmsi,
-            imo: ship.imo != null ? String(ship.imo) : null,
-            name: ship.name || `Vessel ${mmsi.slice(-4)}`,
-            type: normalizeShipType(ship.shipTypeCode ?? ship.type),
-            shipTypeCode: ship.shipTypeCode ?? null,
-            latitude: ship.latitude,
-            longitude: ship.longitude,
-            course: Number(ship.course || 0),
-            speed: Number(ship.speed || 0),
-            heading: Number(ship.heading || 0),
-            status: normalizeStatus(ship.status),
-            timestamp: new Date(ship.timestamp || Date.now()),
-            lastUpdate: new Date(ship.lastUpdate || Date.now()),
-            track: [
-              {
-                latitude: ship.latitude,
-                longitude: ship.longitude,
-                timestamp: new Date(),
-              },
-            ],
-          };
+          acc[normalized.mmsi] = normalized;
           return acc;
         }, {});
+
         setShipsByMmsi(initial);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (regionRequestRef.current !== requestId) return;
+        setConnectionStatus("offline");
+        setStatusMessage("Unable to update monitored region");
+      });
 
     return () => {
-      cancelled = true;
+      window.clearTimeout(resetTimer);
     };
-  }, [bboxKey]);
+  }, [bboxKey, bbox]);
 
   useEffect(() => {
     const ws = new WebSocket(resolveWsUrl());
@@ -314,17 +335,23 @@ export function useRealTimeAIS(bbox: BoundingBox) {
     // Batch process payloads to prevent React performance death
     const batchInterval = setInterval(() => {
       if (payloadBuffer.current.length > 0) {
+        const bufferedPayloads = payloadBuffer.current;
+        payloadBuffer.current = [];
+
         setShipsByMmsi((current) => {
-          let next = { ...current };
-          for (const payload of payloadBuffer.current) {
+          let next = current;
+          for (const payload of bufferedPayloads) {
             const report = payload.Message?.PositionReport;
+            if (!report || !isWithinBbox(report.Latitude, report.Longitude, bboxRef.current)) {
+              continue;
+            }
+
             const mmsi = String(payload.MetaData?.MMSI || report?.UserID || "");
             const staticInfo = mmsi ? staticInfoRef.current[mmsi] : null;
             next = upsertShip(next, payload, staticInfo);
           }
           return next;
         });
-        payloadBuffer.current = [];
       }
     }, 1000);
 
@@ -361,6 +388,11 @@ export function useRealTimeAIS(bbox: BoundingBox) {
         }
 
         if (payload.MessageType === "PositionReport") {
+          const report = payload.Message?.PositionReport;
+          if (!report || !isWithinBbox(report.Latitude, report.Longitude, bboxRef.current)) {
+            return;
+          }
+
           payloadBuffer.current.push(payload);
           setConnectionStatus("online");
           return;
