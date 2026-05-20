@@ -18,6 +18,18 @@ const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 
 // Get API key from environment
 const API_KEY = process.env.AISSTREAM_API_KEY;
+const ALLOW_INSECURE_AIS_TLS =
+  process.env.AISSTREAM_ALLOW_INSECURE_TLS === "true";
+
+function getAisWebSocketOptions() {
+  if (!ALLOW_INSECURE_AIS_TLS) return undefined;
+
+  console.warn(
+    "⚠️  AISSTREAM_ALLOW_INSECURE_TLS=true: skipping TLS certificate validation for aisstream.io.",
+  );
+  console.warn("   Use this only as a temporary development workaround.");
+  return { rejectUnauthorized: false };
+}
 
 if (!API_KEY) {
   console.warn(
@@ -59,7 +71,7 @@ function connectToAISStream() {
   console.log("🔌 Connecting to aisstream.io...");
 
   try {
-    aisSocket = new WebSocket(AIS_STREAM_URL);
+    aisSocket = new WebSocket(AIS_STREAM_URL, getAisWebSocketOptions());
 
     aisSocket.on("open", () => {
       console.log("✅ Connected to aisstream.io");

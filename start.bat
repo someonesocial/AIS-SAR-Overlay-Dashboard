@@ -10,6 +10,7 @@ taskkill /FI "WINDOWTITLE eq Eye of God Launcher" /T /F >nul 2>&1
 taskkill /FI "WINDOWTITLE eq Eye of God Backend" /T /F >nul 2>&1
 taskkill /FI "WINDOWTITLE eq Eye of God Frontend" /T /F >nul 2>&1
 taskkill /FI "WINDOWTITLE eq npm install" /T /F >nul 2>&1
+for /f %%P in ('powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"') do taskkill /PID %%P /F >nul 2>&1
 
 echo.
 echo Make sure you have Node.js installed and set up your

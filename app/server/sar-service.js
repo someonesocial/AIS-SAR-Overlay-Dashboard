@@ -44,6 +44,7 @@ async function searchSARData(bbox, options = {}) {
     const response = await axios.get(ASF_API_URL, {
       params,
       timeout: 30000,
+      proxy: false,
     });
 
     const rawScenes = normalizeASFResponse(response.data);

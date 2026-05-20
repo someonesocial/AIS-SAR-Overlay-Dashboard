@@ -24,6 +24,8 @@ const wss = new WebSocket.Server({ server, path: "/ws" });
 const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
 const API_KEY = process.env.AISSTREAM_API_KEY;
+const ALLOW_INSECURE_AIS_TLS =
+  process.env.AISSTREAM_ALLOW_INSECURE_TLS === "true";
 const ASF_BROWSE_HOST = "datapool.asf.alaska.edu";
 // Track ships in the Baltic Sea by default.
 const DEFAULT_BBOX = {
@@ -45,6 +47,16 @@ function bboxToAisBoundingBoxes(bbox) {
 }
 
 let aisBoundingBoxes = bboxToAisBoundingBoxes(activeBbox);
+
+function getAisWebSocketOptions() {
+  if (!ALLOW_INSECURE_AIS_TLS) return undefined;
+
+  console.warn(
+    "⚠️  AISSTREAM_ALLOW_INSECURE_TLS=true: skipping TLS certificate validation for aisstream.io.",
+  );
+  console.warn("   Use this only as a temporary development workaround.");
+  return { rejectUnauthorized: false };
+}
 
 // Middleware
 app.use(cors());
@@ -281,7 +293,7 @@ function connectToAISStream() {
       reconnectTimer = null;
     }
 
-    aisSocket = new WebSocket(AIS_STREAM_URL);
+    aisSocket = new WebSocket(AIS_STREAM_URL, getAisWebSocketOptions());
 
     aisSocket.on("open", () => {
       console.log("✅ Connected to aisstream.io");
@@ -576,6 +588,7 @@ app.get("/api/sar/browse", async (req, res) => {
     const response = await axios.get(parsed.toString(), {
       responseType: "stream",
       timeout: 30000,
+      proxy: false,
       maxRedirects: 5,
       headers: {
         "User-Agent": "Eye-of-God-SAR-Proxy/1.0",
@@ -678,6 +691,30 @@ if (process.env.NODE_ENV === "production") {
 
 // ==================== Start Server ====================
 
+server.on("error", (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    console.error(`❌ Port ${PORT} is already in use.`);
+    console.error(
+      "   Another backend instance is already running, or the port is occupied by a different app.",
+    );
+    console.error(
+      "   Stop the existing process, or set a different PORT in app/.env before starting again.",
+    );
+    process.exit(1);
+  }
+
+  console.error("❌ Server error:", err.message);
+  process.exit(1);
+});
+
+wss.on("error", (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    return;
+  }
+
+  console.error("❌ WebSocket server error:", err.message);
+});
+
 server.listen(PORT, () => {
   console.log("╔════════════════════════════════════════════════════════╗");
   console.log("║     🛰️  EYE OF GOD - Maritime Surveillance Server     ║");
@@ -688,18 +725,6 @@ server.listen(PORT, () => {
   console.log("");
 
   connectToAISStream();
-});
-
-server.on("error", (err) => {
-  if (err && err.code === "EADDRINUSE") {
-    console.error(`❌ Port ${PORT} is already in use.`);
-    console.error("   Another backend instance is already running, or the port is occupied by a different app.");
-    console.error("   Stop the existing process, or set a different PORT in app/.env before starting again.");
-    process.exit(1);
-  }
-
-  console.error("❌ Server error:", err.message);
-  process.exit(1);
 });
 
 // Graceful shutdown
