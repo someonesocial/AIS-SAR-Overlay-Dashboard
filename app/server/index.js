@@ -3,6 +3,19 @@
  * Proxies AIS data and provides SAR + AI detection services
  */
 
+// Some development shells inject a dead local proxy such as 127.0.0.1:9.
+// External maritime data providers must be reached directly from this server.
+for (const key of [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+]) {
+  delete process.env[key];
+}
+
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
@@ -28,6 +41,12 @@ const ALLOW_INSECURE_AIS_TLS =
   process.env.AISSTREAM_ALLOW_INSECURE_TLS === "true";
 const ASF_BROWSE_HOST = "datapool.asf.alaska.edu";
 // Track ships in the Baltic Sea by default.
+const POSITION_MESSAGE_TYPES = [
+  "PositionReport",
+  "StandardClassBPositionReport",
+  "ExtendedClassBPositionReport",
+];
+const STATIC_MESSAGE_TYPES = ["ShipStaticData", "StaticDataReport"];
 const DEFAULT_BBOX = {
   minLat: 54.0,
   maxLat: 59.0,
@@ -238,6 +257,17 @@ function extractMmsi(message, report) {
   return message.MetaData?.MMSI || report?.UserID || message.UserID || null;
 }
 
+function extractPositionReport(message) {
+  if (!message?.Message) return null;
+
+  for (const type of POSITION_MESSAGE_TYPES) {
+    const report = message.Message[type];
+    if (report) return report;
+  }
+
+  return null;
+}
+
 function isTrackedShip(ship) {
   return (
     ship &&
@@ -303,7 +333,7 @@ function connectToAISStream() {
       const subscribeMessage = {
         APIKey: API_KEY,
         BoundingBoxes: aisBoundingBoxes,
-        FilterMessageTypes: ["PositionReport", "ShipStaticData"],
+        FilterMessageTypes: [...POSITION_MESSAGE_TYPES, ...STATIC_MESSAGE_TYPES],
       };
 
       aisSocket.send(JSON.stringify(subscribeMessage));
@@ -376,11 +406,8 @@ function processAISMessage(message) {
     return;
   }
 
-  if (
-    message.MessageType === "PositionReport" &&
-    message.Message?.PositionReport
-  ) {
-    const report = message.Message.PositionReport;
+  const report = extractPositionReport(message);
+  if (report) {
     if (!isPositionInBbox(report.Latitude, report.Longitude, activeBbox)) {
       return;
     }

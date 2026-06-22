@@ -4,6 +4,19 @@
  * Handles CORS issues and provides a local WebSocket endpoint
  */
 
+// Some development shells inject a dead local proxy such as 127.0.0.1:9.
+// External maritime data providers must be reached directly from this server.
+for (const key of [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+]) {
+  delete process.env[key];
+}
+
 const WebSocket = require("ws");
 const http = require("http");
 const path = require("path");

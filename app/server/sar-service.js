@@ -3,6 +3,19 @@
  * Fetches SAR data from NASA ASF and performs AI ship detection
  */
 
+// Some development shells inject a dead local proxy such as 127.0.0.1:9.
+// External maritime data providers must be reached directly from this server.
+for (const key of [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+]) {
+  delete process.env[key];
+}
+
 const axios = require("axios");
 
 const ASF_API_URL = "https://api.daac.asf.alaska.edu/services/search/param";
@@ -17,7 +30,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  */
 async function searchSARData(bbox, options = {}) {
   const {
-    start = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     end = new Date().toISOString(),
     processingLevel = "GRD_HD",
     beamMode = "IW",
@@ -215,8 +228,14 @@ async function getLatestSARWithDetections(bbox, aisShips = []) {
     return sarDataCache.data;
   }
 
-  // Fetch new data
-  const scenes = await searchSARData(bbox);
+  // Fetch new data. Sentinel-1 coverage is not guaranteed every 24 hours for each region.
+  let scenes = await searchSARData(bbox);
+
+  if (scenes.length === 0) {
+    scenes = await searchSARData(bbox, {
+      start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+  }
 
   if (scenes.length === 0) {
     const emptyResult = {

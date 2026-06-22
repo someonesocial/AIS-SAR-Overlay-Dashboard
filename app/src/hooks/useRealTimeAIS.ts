@@ -48,6 +48,24 @@ type AisMessagePayload = {
       Sog?: number | string;
       NavigationalStatus?: unknown;
     };
+    StandardClassBPositionReport?: {
+      UserID?: string | number;
+      Latitude: number;
+      Longitude: number;
+      Cog?: number | string;
+      TrueHeading?: number | string;
+      Sog?: number | string;
+      NavigationalStatus?: unknown;
+    };
+    ExtendedClassBPositionReport?: {
+      UserID?: string | number;
+      Latitude: number;
+      Longitude: number;
+      Cog?: number | string;
+      TrueHeading?: number | string;
+      Sog?: number | string;
+      NavigationalStatus?: unknown;
+    };
     ShipStaticData?: {
       Name?: string;
       Type?: unknown;
@@ -99,6 +117,21 @@ function isWithinBbox(latitude: number, longitude: number, bbox: BoundingBox) {
     longitude >= bbox.minLon &&
     longitude <= bbox.maxLon
   );
+}
+
+function getPositionReport(payload: AisMessagePayload) {
+  return (
+    payload.Message?.PositionReport ||
+    payload.Message?.StandardClassBPositionReport ||
+    payload.Message?.ExtendedClassBPositionReport ||
+    null
+  );
+}
+
+function isPositionMessage(payload: AisMessagePayload) {
+  return payload.MessageType === "PositionReport" ||
+    payload.MessageType === "StandardClassBPositionReport" ||
+    payload.MessageType === "ExtendedClassBPositionReport";
 }
 
 function normalizeStatus(value: unknown): NavigationStatus {
@@ -201,7 +234,7 @@ function upsertShip(
   payload: AisMessagePayload,
   staticInfo?: StaticShipInfo | null,
 ): ShipStore {
-  const report = payload.Message?.PositionReport;
+  const report = getPositionReport(payload);
   if (!report) return previous;
 
   const mmsi = String(payload.MetaData?.MMSI || report.UserID || "");
@@ -341,7 +374,7 @@ export function useRealTimeAIS(bbox: BoundingBox) {
         setShipsByMmsi((current) => {
           let next = current;
           for (const payload of bufferedPayloads) {
-            const report = payload.Message?.PositionReport;
+            const report = getPositionReport(payload);
             if (!report || !isWithinBbox(report.Latitude, report.Longitude, bboxRef.current)) {
               continue;
             }
@@ -387,8 +420,8 @@ export function useRealTimeAIS(bbox: BoundingBox) {
           return;
         }
 
-        if (payload.MessageType === "PositionReport") {
-          const report = payload.Message?.PositionReport;
+        if (isPositionMessage(payload)) {
+          const report = getPositionReport(payload);
           if (!report || !isWithinBbox(report.Latitude, report.Longitude, bboxRef.current)) {
             return;
           }
