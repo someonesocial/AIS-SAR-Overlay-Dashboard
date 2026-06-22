@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 title EyeOfGod Launcher
 cd /d "%~dp0"
@@ -12,7 +12,6 @@ echo.
 echo Cleaning up old Eye of God instances...
 call :KillWindow "Eye of God Backend*"
 call :KillWindow "Eye of God Frontend*"
-call :KillWindow "npm*"
 call :KillPorts 3001 5173
 call :WaitForPortsFree 3001 5173
 
@@ -41,7 +40,7 @@ pause
 exit /b 0
 
 :KillWindow
-taskkill /FI "WINDOWTITLE eq %~1" /T /F >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process cmd -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like '%~1' } | Stop-Process -Force -ErrorAction SilentlyContinue"
 exit /b 0
 
 :KillPorts

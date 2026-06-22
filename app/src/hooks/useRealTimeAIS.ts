@@ -363,6 +363,40 @@ export function useRealTimeAIS(bbox: BoundingBox) {
   }, [bboxKey, bbox]);
 
   useEffect(() => {
+    const interval = setInterval(() => {
+      fetch(`${resolveApiBase()}/api/health`)
+        .then((res) => res.json())
+        .then((data: {
+          ais?: string;
+          aisMessagesReceived?: number;
+          shipsTracked?: number;
+        }) => {
+          if (data.ais === "stale") {
+            setConnectionStatus("offline");
+            setStatusMessage(
+              "aisstream.io is connected but not delivering vessel data. The upstream feed may be unavailable — try regenerating your API key at aisstream.io.",
+            );
+            return;
+          }
+
+          if (
+            data.ais === "connected" &&
+            (data.aisMessagesReceived || 0) === 0 &&
+            (data.shipsTracked || 0) === 0
+          ) {
+            setConnectionStatus("connecting");
+            setStatusMessage("Waiting for live AIS vessel data...");
+          }
+        })
+        .catch(() => {
+          // Ignore transient health-check failures.
+        });
+    }, 20_000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     const ws = new WebSocket(resolveWsUrl());
 
     // Batch process payloads to prevent React performance death
@@ -410,9 +444,11 @@ export function useRealTimeAIS(bbox: BoundingBox) {
 
         if (payload.type === "status") {
           if (payload.status === "connected") {
-            setConnectionStatus("online");
+            setConnectionStatus("connecting");
           } else if (payload.status === "reconnecting") {
             setConnectionStatus("connecting");
+          } else if (payload.status === "error") {
+            setConnectionStatus("offline");
           } else {
             setConnectionStatus("offline");
           }

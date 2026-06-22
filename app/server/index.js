@@ -36,9 +36,11 @@ const wss = new WebSocket.Server({ server, path: "/ws" });
 
 const PORT = process.env.PORT || 3001;
 const AIS_STREAM_URL = "wss://stream.aisstream.io/v0/stream";
-const API_KEY = process.env.AISSTREAM_API_KEY;
+const API_KEY = (process.env.AISSTREAM_API_KEY || "").trim();
 const ALLOW_INSECURE_AIS_TLS =
   process.env.AISSTREAM_ALLOW_INSECURE_TLS === "true";
+const AIS_STALE_TIMEOUT_MS = 45_000;
+const AIS_STALE_CHECK_INTERVAL_MS = 15_000;
 const ASF_BROWSE_HOST = "datapool.asf.alaska.edu";
 // Track ships in the Baltic Sea by default.
 const POSITION_MESSAGE_TYPES = [
@@ -55,6 +57,10 @@ const DEFAULT_BBOX = {
 };
 let activeBbox = { ...DEFAULT_BBOX };
 let reconnectTimer = null;
+let staleCheckTimer = null;
+let subscriptionSentAt = null;
+let lastAisMessageAt = null;
+let aisMessagesReceived = 0;
 
 function bboxToAisBoundingBoxes(bbox) {
   return [
@@ -307,6 +313,86 @@ function mergeShipRecord(mmsi, updates) {
 
 // ==================== AIS WebSocket Proxy ====================
 
+function buildSubscriptionMessage() {
+  return {
+    APIKey: API_KEY,
+    BoundingBoxes: aisBoundingBoxes,
+    FilterMessageTypes: [...POSITION_MESSAGE_TYPES, ...STATIC_MESSAGE_TYPES],
+  };
+}
+
+function sendAisSubscription() {
+  if (!aisSocket || aisSocket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  subscriptionSentAt = Date.now();
+  aisSocket.send(JSON.stringify(buildSubscriptionMessage()));
+  console.log("📤 Subscription sent for region:", JSON.stringify(activeBbox));
+  return true;
+}
+
+function noteAisMessage() {
+  lastAisMessageAt = Date.now();
+  aisMessagesReceived += 1;
+}
+
+function stopStaleWatchdog() {
+  if (staleCheckTimer) {
+    clearInterval(staleCheckTimer);
+    staleCheckTimer = null;
+  }
+}
+
+function startStaleWatchdog() {
+  stopStaleWatchdog();
+
+  staleCheckTimer = setInterval(() => {
+    if (!API_KEY || !isConnected) {
+      return;
+    }
+
+    const reference = lastAisMessageAt || subscriptionSentAt;
+    if (!reference || Date.now() - reference < AIS_STALE_TIMEOUT_MS) {
+      return;
+    }
+
+    console.warn(
+      "⚠️  AIS stream connected but no vessel data received recently. Reconnecting...",
+    );
+    broadcastStatus(
+      "error",
+      "AIS feed connected but not delivering data. Reconnecting to aisstream.io...",
+    );
+    forceAisReconnect();
+  }, AIS_STALE_CHECK_INTERVAL_MS);
+}
+
+function forceAisReconnect() {
+  stopStaleWatchdog();
+  subscriptionSentAt = null;
+  lastAisMessageAt = null;
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  if (aisSocket) {
+    aisSocket.removeAllListeners();
+    if (
+      aisSocket.readyState === WebSocket.OPEN ||
+      aisSocket.readyState === WebSocket.CONNECTING
+    ) {
+      aisSocket.close();
+    }
+    aisSocket = null;
+  }
+
+  isConnected = false;
+  connectToAISStream();
+}
+
 function connectToAISStream() {
   if (!API_KEY) {
     console.log(
@@ -328,16 +414,8 @@ function connectToAISStream() {
     aisSocket.on("open", () => {
       console.log("✅ Connected to aisstream.io");
       isConnected = true;
-
-      // Subscribe to the currently selected monitoring region.
-      const subscribeMessage = {
-        APIKey: API_KEY,
-        BoundingBoxes: aisBoundingBoxes,
-        FilterMessageTypes: [...POSITION_MESSAGE_TYPES, ...STATIC_MESSAGE_TYPES],
-      };
-
-      aisSocket.send(JSON.stringify(subscribeMessage));
-      console.log("📤 Subscription sent:", JSON.stringify(subscribeMessage));
+      sendAisSubscription();
+      startStaleWatchdog();
       broadcastStatus("connected", "Connected to AIS Stream");
     });
 
@@ -351,7 +429,10 @@ function connectToAISStream() {
           return;
         }
         if (message.MessageType) {
-          console.log(`📡 AIS message received: ${message.MessageType}`);
+          noteAisMessage();
+          if (aisMessagesReceived <= 3 || aisMessagesReceived % 100 === 0) {
+            console.log(`📡 AIS message received: ${message.MessageType}`);
+          }
         }
         processAISMessage(message);
         broadcastToClients(data.toString());
@@ -369,6 +450,7 @@ function connectToAISStream() {
     aisSocket.on("close", () => {
       console.log("🔌 AIS Stream disconnected, reconnecting in 5s...");
       isConnected = false;
+      stopStaleWatchdog();
       broadcastStatus("reconnecting", "Reconnecting...");
       reconnectTimer = setTimeout(connectToAISStream, 5000);
     });
@@ -382,8 +464,13 @@ function applyActiveBbox(nextBbox) {
   aisBoundingBoxes = bboxToAisBoundingBoxes(activeBbox);
   shipsCache = new Map();
 
+  if (sendAisSubscription()) {
+    broadcastStatus("connected", "Updated AIS monitoring region");
+    return;
+  }
+
   if (aisSocket) {
-    aisSocket.close();
+    forceAisReconnect();
     return;
   }
 
@@ -511,10 +598,26 @@ function broadcastStatus(status, message) {
 
 // Health check
 app.get("/api/health", (req, res) => {
+  const now = Date.now();
+  const reference = lastAisMessageAt || subscriptionSentAt;
+  const aisStale =
+    Boolean(API_KEY && isConnected && reference) &&
+    now - reference >= AIS_STALE_TIMEOUT_MS;
+
   res.json({
     status: "ok",
-    ais: isConnected ? "connected" : API_KEY ? "connecting" : "disconnected",
-    shipsTracked: shipsCache.size,
+    ais: !API_KEY
+      ? "disconnected"
+      : aisStale
+        ? "stale"
+        : isConnected
+          ? "connected"
+          : "connecting",
+    aisMessagesReceived,
+    lastAisMessageAt: lastAisMessageAt
+      ? new Date(lastAisMessageAt).toISOString()
+      : null,
+    shipsTracked: getTrackedShips().length,
     region: activeBbox,
     timestamp: new Date().toISOString(),
   });
@@ -757,6 +860,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on("SIGINT", () => {
   console.log("\n🛑 Shutting down...");
+  stopStaleWatchdog();
   if (aisSocket) aisSocket.close();
   server.close(() => {
     console.log("✅ Server closed");

@@ -78,7 +78,10 @@ npm run dev
 - **"Warning: AISSTREAM_API_KEY not set. Cannot stream live data."**
   Your background terminal couldn't find the API key. Ensure you created the `.env` file directly inside the `app/` folder (so the path is `app/.env`), and it contains `AISSTREAM_API_KEY=YOUR_KEY`.
 - **Vite/React map is totally blank or isn't streaming ships?**
-  Open the developer console in your browser (`F12`) and check for connection errors. Verify your **Terminal 1** node server is still running seamlessly without crashing.
+  Open the developer console in your browser (`F12`) and check for connection errors. Verify your **Terminal 1** node server is still running seamlessly without crashing. Check `http://127.0.0.1:3001/api/health` — if `ais` is `stale` or `aisMessagesReceived` stays at `0`, the local app is working but **aisstream.io is not delivering live vessel data** (a known intermittent upstream issue). Try regenerating your API key at [aisstream.io](https://aisstream.io) and restarting via `start.bat`.
+
+- **Old backend/frontend windows stay open when using `start.bat`?**
+  The launcher closes previous Eye of God terminal windows and frees ports `3001` and `5173` before starting fresh instances. If a port is still busy, close the old window manually or reboot the stuck process from Task Manager.
 
 - **"Module not found" errors when executing `npm run dev` or `node index.js`**
   Double-check that you ran `npm install` gracefully inside BOTH the `app` folder AND the `app/server` folder.
